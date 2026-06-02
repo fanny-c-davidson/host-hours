@@ -5,6 +5,7 @@ import { useRouter } from "next/navigation";
 import { TopStrip } from "@/components/top-strip";
 import { TaskTypePicker } from "@/components/task-type-picker";
 import { createClient } from "@/lib/supabase/client";
+import { uploadPhotos } from "@/lib/photos";
 
 type Property = {
   id: string;
@@ -37,6 +38,17 @@ export default function LogPage() {
   const [saving, setSaving] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [loading, setLoading] = useState(true);
+  const [photos, setPhotos] = useState<{ file: File; preview: string }[]>([]);
+
+  function handleFileSelect(e: React.ChangeEvent<HTMLInputElement>) {
+    const files = Array.from(e.target.files ?? []);
+    const newPhotos = files.map((file) => ({
+      file,
+      preview: URL.createObjectURL(file),
+    }));
+    setPhotos((prev) => [...prev, ...newPhotos]);
+    e.target.value = "";
+  }
 
   useEffect(() => {
     async function load() {
@@ -89,20 +101,28 @@ export default function LogPage() {
     const title = selectedCategories.join(", ");
     const categoryKey = selectedCategories.map((c) => c.toLowerCase().replace(/[/ ]+/g, "_")).join(",");
 
-    const { error: insertError } = await supabase.from("time_logs").insert({
-      user_id: user.id,
-      property_id: propertyId,
-      title,
-      category: categoryKey,
-      started_at: startedAt,
-      duration_secs: durationSecs,
-      description: notes.trim() || null,
-    });
+    const { data: inserted, error: insertError } = await supabase
+      .from("time_logs")
+      .insert({
+        user_id: user.id,
+        property_id: propertyId,
+        title,
+        category: categoryKey,
+        started_at: startedAt,
+        duration_secs: durationSecs,
+        description: notes.trim() || null,
+      })
+      .select("id")
+      .single();
 
-    if (insertError) {
-      setError(insertError.message);
+    if (insertError || !inserted) {
+      setError(insertError?.message ?? "Failed to save entry.");
       setSaving(false);
       return;
+    }
+
+    if (photos.length > 0) {
+      await uploadPhotos(supabase, user.id, inserted.id, photos);
     }
 
     router.push("/dashboard");
@@ -248,14 +268,60 @@ export default function LogPage() {
           <label className="font-mono text-[10px] tracking-[1.5px] uppercase text-quill font-medium mb-2 block">
             Receipts or photos
           </label>
-          <div className="border border-dashed border-stone rounded-md p-7 text-center bg-cream">
-            <p className="font-serif text-[15px] font-medium text-char">
-              Drop a photo or receipt
-            </p>
-            <p className="mt-1 font-sans text-[12px] text-slate">
-              Optional. Audit-helpful.
-            </p>
+
+          {photos.length > 0 && (
+            <div className="flex gap-3 overflow-x-auto pb-2 mb-3">
+              {photos.map((photo, i) => (
+                <div key={i} className="relative shrink-0 w-20 h-20 rounded-md overflow-hidden border border-chalk">
+                  <img src={photo.preview} alt="" className="w-full h-full object-cover" />
+                  <button
+                    type="button"
+                    onClick={() => setPhotos((prev) => prev.filter((_, j) => j !== i))}
+                    className="absolute top-1 right-1 w-5 h-5 rounded-full bg-char/70 text-cream flex items-center justify-center text-[11px] leading-none"
+                  >
+                    ×
+                  </button>
+                </div>
+              ))}
+            </div>
+          )}
+
+          <div className="grid grid-cols-2 gap-3">
+            <label className="flex items-center justify-center gap-2 border border-dashed border-stone rounded-md p-4 cursor-pointer hover:border-plum transition-colors">
+              <svg className="w-5 h-5 text-quill" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round">
+                <rect x="3" y="3" width="18" height="18" rx="2" />
+                <circle cx="8.5" cy="8.5" r="1.5" />
+                <path d="m21 15-5-5L5 21" />
+              </svg>
+              <span className="font-mono text-[10px] tracking-[1.5px] uppercase text-quill font-medium">Gallery</span>
+              <input
+                type="file"
+                accept="image/*"
+                multiple
+                className="hidden"
+                onChange={handleFileSelect}
+              />
+            </label>
+
+            <label className="flex items-center justify-center gap-2 border border-dashed border-stone rounded-md p-4 cursor-pointer hover:border-plum transition-colors">
+              <svg className="w-5 h-5 text-quill" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round">
+                <path d="M14.5 4h-5L7 7H4a2 2 0 0 0-2 2v9a2 2 0 0 0 2 2h16a2 2 0 0 0 2-2V9a2 2 0 0 0-2-2h-3l-2.5-3z" />
+                <circle cx="12" cy="13" r="3" />
+              </svg>
+              <span className="font-mono text-[10px] tracking-[1.5px] uppercase text-quill font-medium">Camera</span>
+              <input
+                type="file"
+                accept="image/*"
+                capture="environment"
+                className="hidden"
+                onChange={handleFileSelect}
+              />
+            </label>
           </div>
+
+          <p className="mt-2 text-[12px] text-slate">
+            Optional. Audit-helpful.
+          </p>
         </div>
 
         {/* Submit */}

@@ -314,7 +314,7 @@ export default function DashboardPage() {
                       )}
                       <div className="flex items-center gap-3 mt-1">
                         <Link
-                          href="/timer"
+                          href={`/timer?property=${prop.id}`}
                           className="font-mono text-[10px] uppercase tracking-[1px] text-plum underline decoration-tangerine underline-offset-3"
                         >
                           Start timer
