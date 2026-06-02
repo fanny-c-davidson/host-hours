@@ -1,6 +1,6 @@
 "use client";
 
-import { useState, useEffect } from "react";
+import { Suspense, useState, useEffect } from "react";
 import { useRouter, useSearchParams } from "next/navigation";
 import { TopStrip } from "@/components/top-strip";
 import { TaskTypePicker } from "@/components/task-type-picker";
@@ -14,6 +14,20 @@ type Property = {
 };
 
 export default function TimerPage() {
+  return (
+    <Suspense
+      fallback={
+        <div className="min-h-screen bg-cream flex items-center justify-center">
+          <span className="w-6 h-6 border-2 border-plum border-t-transparent rounded-full animate-spin" />
+        </div>
+      }
+    >
+      <TimerContent />
+    </Suspense>
+  );
+}
+
+function TimerContent() {
   const router = useRouter();
   const searchParams = useSearchParams();
   const preselectedPropertyId = searchParams.get("property");
