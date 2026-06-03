@@ -2,10 +2,13 @@
 
 import { useState, useRef, useEffect } from "react";
 
-type Suggestion = {
-  display_name: string;
-  lat: string;
-  lon: string;
+type MapboxFeature = {
+  place_name: string;
+  center: [number, number]; // [lng, lat]
+};
+
+type MapboxResponse = {
+  features: MapboxFeature[];
 };
 
 export function AddressInput({
@@ -17,9 +20,10 @@ export function AddressInput({
   onChange: (v: string) => void;
   onSelect?: (address: string, lat: number, lng: number) => void;
 }) {
-  const [suggestions, setSuggestions] = useState<Suggestion[]>([]);
+  const [suggestions, setSuggestions] = useState<MapboxFeature[]>([]);
   const [open, setOpen] = useState(false);
   const timerRef = useRef<ReturnType<typeof setTimeout>>(null);
+  const sessionTokenRef = useRef(crypto.randomUUID());
   const wrapperRef = useRef<HTMLDivElement>(null);
 
   useEffect(() => {
@@ -37,7 +41,7 @@ export function AddressInput({
 
     if (timerRef.current) clearTimeout(timerRef.current);
 
-    if (text.length < 4) {
+    if (text.length < 3) {
       setSuggestions([]);
       setOpen(false);
       return;
@@ -45,24 +49,27 @@ export function AddressInput({
 
     timerRef.current = setTimeout(async () => {
       try {
+        const token = process.env.NEXT_PUBLIC_MAPBOX_TOKEN;
+        if (!token) return;
+
         const res = await fetch(
-          `https://nominatim.openstreetmap.org/search?format=json&limit=5&countrycodes=us&q=${encodeURIComponent(text)}`,
-          { headers: { "Accept-Language": "en" } },
+          `https://api.mapbox.com/geocoding/v5/mapbox.places/${encodeURIComponent(text)}.json?access_token=${token}&country=us&types=address&limit=5&autocomplete=true`,
         );
-        const data: Suggestion[] = await res.json();
-        setSuggestions(data);
-        setOpen(data.length > 0);
+        const data: MapboxResponse = await res.json();
+        setSuggestions(data.features || []);
+        setOpen((data.features || []).length > 0);
       } catch {
         setSuggestions([]);
       }
-    }, 350);
+    }, 300);
   }
 
-  function handleSelect(s: Suggestion) {
-    onChange(s.display_name);
+  function handleSelect(f: MapboxFeature) {
+    onChange(f.place_name);
     setOpen(false);
     setSuggestions([]);
-    onSelect?.(s.display_name, parseFloat(s.lat), parseFloat(s.lon));
+    sessionTokenRef.current = crypto.randomUUID();
+    onSelect?.(f.place_name, f.center[1], f.center[0]);
   }
 
   return (
@@ -78,14 +85,14 @@ export function AddressInput({
       />
       {open && suggestions.length > 0 && (
         <ul className="absolute z-20 left-0 right-0 mt-1 bg-cream border border-chalk rounded-md shadow-lg max-h-52 overflow-y-auto">
-          {suggestions.map((s, i) => (
+          {suggestions.map((f, i) => (
             <li key={i}>
               <button
                 type="button"
-                onClick={() => handleSelect(s)}
+                onClick={() => handleSelect(f)}
                 className="w-full text-left px-4 py-3 text-[14px] text-char hover:bg-plum-mist transition-colors border-b border-chalk last:border-b-0"
               >
-                {s.display_name}
+                {f.place_name}
               </button>
             </li>
           ))}
