@@ -46,7 +46,7 @@ export function AddressInput({
     timerRef.current = setTimeout(async () => {
       try {
         const res = await fetch(
-          `https://nominatim.openstreetmap.org/search?format=json&limit=5&q=${encodeURIComponent(text)}`,
+          `https://nominatim.openstreetmap.org/search?format=json&limit=5&countrycodes=us&q=${encodeURIComponent(text)}`,
           { headers: { "Accept-Language": "en" } },
         );
         const data: Suggestion[] = await res.json();
