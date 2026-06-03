@@ -9,6 +9,9 @@ export function PropertyFilter({
   activeProp,
   onTagChange,
   onPropChange,
+  spouseName,
+  showCombined,
+  onToggleCombined,
 }: {
   properties: Property[];
   allTags: string[];
@@ -16,6 +19,9 @@ export function PropertyFilter({
   activeProp: string;
   onTagChange: (tag: string | null) => void;
   onPropChange: (prop: string) => void;
+  spouseName?: string | null;
+  showCombined?: boolean;
+  onToggleCombined?: () => void;
 }) {
   const tagFiltered = activeTag
     ? properties.filter((p) => (p.tags ?? []).includes(activeTag))
@@ -90,6 +96,28 @@ export function PropertyFilter({
               {p.name}
             </button>
           ))}
+        </div>
+      )}
+
+      {/* Spouse toggle */}
+      {spouseName && onToggleCombined && (
+        <div className="px-7 pt-1 pb-4 flex items-center justify-between">
+          <span className="font-sans text-[13px] text-quill">
+            Include {spouseName}&rsquo;s hours
+          </span>
+          <button
+            type="button"
+            onClick={onToggleCombined}
+            className={`relative w-11 h-7 rounded-[999px] shrink-0 transition-colors ${
+              showCombined ? "bg-plum" : "bg-chalk"
+            }`}
+          >
+            <span
+              className={`absolute top-[3px] left-[3px] w-[22px] h-[22px] bg-cream rounded-full transition-transform ${
+                showCombined ? "translate-x-4" : ""
+              }`}
+            />
+          </button>
         </div>
       )}
     </div>

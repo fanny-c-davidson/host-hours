@@ -437,6 +437,9 @@ function ReportsContent() {
                     setActiveProp("All properties");
                   }}
                   onPropChange={setActiveProp}
+                  spouseName={spouseLinked ? spouseName : null}
+                  showCombined={showCombined}
+                  onToggleCombined={spouseLinked ? () => setShowCombined(!showCombined) : undefined}
                 />
 
                 {/* Hero stat */}
@@ -464,33 +467,6 @@ function ReportsContent() {
                     </div>
                   )}
                 </section>
-
-                {/* Spouse toggle */}
-                {spouseLinked && (
-                  <div className="px-7 py-4 border-b border-chalk flex items-center justify-between">
-                    <div>
-                      <span className="font-serif text-[15px] font-medium text-char block">
-                        Include spouse hours
-                      </span>
-                      <span className="text-[12px] text-slate">
-                        Combine with {spouseName ?? "spouse"} for tracking
-                      </span>
-                    </div>
-                    <button
-                      type="button"
-                      onClick={() => setShowCombined(!showCombined)}
-                      className={`relative w-11 h-7 rounded-[999px] shrink-0 transition-colors ${
-                        showCombined ? "bg-plum" : "bg-chalk"
-                      }`}
-                    >
-                      <span
-                        className={`absolute top-[3px] left-[3px] w-[22px] h-[22px] bg-cream rounded-full transition-transform ${
-                          showCombined ? "translate-x-4" : ""
-                        }`}
-                      />
-                    </button>
-                  </div>
-                )}
 
                 {/* KPIs */}
                 {kpis.map((test) => (
