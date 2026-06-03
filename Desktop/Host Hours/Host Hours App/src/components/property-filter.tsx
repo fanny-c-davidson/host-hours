@@ -101,22 +101,20 @@ export function PropertyFilter({
 
       {/* Spouse toggle */}
       {spouseName && onToggleCombined && (
-        <div className="px-7 pt-1 pb-4 flex items-center justify-between">
-          <span className="font-sans text-[13px] text-quill">
-            Include {spouseName}&rsquo;s hours
+        <div className="px-7 pt-2 pb-4 flex gap-2 items-center">
+          <span className="shrink-0 font-mono text-[9px] uppercase tracking-[1.5px] text-slate font-medium mr-1">
+            Spouse
           </span>
           <button
             type="button"
             onClick={onToggleCombined}
-            className={`relative w-11 h-7 rounded-[999px] shrink-0 transition-colors ${
-              showCombined ? "bg-plum" : "bg-chalk"
+            className={`shrink-0 min-h-9 px-3.5 py-2 rounded-[999px] text-[13px] font-medium transition-colors ${
+              showCombined
+                ? "bg-char text-cream border border-char"
+                : "border border-chalk text-quill hover:border-stone"
             }`}
           >
-            <span
-              className={`absolute top-[3px] left-[3px] w-[22px] h-[22px] bg-cream rounded-full transition-transform ${
-                showCombined ? "translate-x-4" : ""
-              }`}
-            />
+            Add {spouseName}&rsquo;s hours
           </button>
         </div>
       )}
