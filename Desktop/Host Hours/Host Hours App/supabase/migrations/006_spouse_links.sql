@@ -11,6 +11,16 @@ create table spouse_links (
 
 alter table spouse_links enable row level security;
 
+-- Helper: get current user's email without hitting profiles RLS (breaks recursion)
+create or replace function get_my_email()
+returns text
+language sql
+security definer
+stable
+as $$
+  select email from public.profiles where id = auth.uid();
+$$;
+
 -- Both sides can view the link
 create policy "Users can view own spouse links"
   on spouse_links for select using (
@@ -21,7 +31,7 @@ create policy "Users can view own spouse links"
 create policy "Users can view pending invites to them"
   on spouse_links for select using (
     status = 'pending'
-    and partner_email = (select email from public.profiles where id = auth.uid())
+    and partner_email = get_my_email()
   );
 
 -- Any authenticated user can create a link
@@ -31,7 +41,7 @@ create policy "Users can create spouse links"
 -- Partner can accept (update status + set partner_id)
 create policy "Partner can accept invite"
   on spouse_links for update using (
-    partner_email = (select email from public.profiles where id = auth.uid())
+    partner_email = get_my_email()
   );
 
 -- Either side can delete (unlink)
