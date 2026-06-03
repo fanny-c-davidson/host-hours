@@ -36,12 +36,13 @@ const items = [
     isCenter: true,
   },
   {
-    href: "/timer",
-    label: "Timer",
+    href: "/properties",
+    label: "Properties",
     icon: (
       <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round">
-        <circle cx="12" cy="12" r="10" />
-        <polyline points="12 6 12 12 16 14" />
+        <path d="M3 9l9-7 9 7" />
+        <path d="M9 22V12h6v10" />
+        <rect x="2" y="9" width="20" height="13" rx="1" fill="none" />
       </svg>
     ),
   },
@@ -69,7 +70,7 @@ export function Dock() {
             <Link
               key={item.href}
               href={item.href}
-              className={`flex flex-col items-center gap-1 py-1.5 px-1 transition-colors ${
+              className={`flex flex-col items-center gap-1 py-2.5 px-2 min-w-[44px] min-h-[44px] justify-center transition-colors ${
                 item.isCenter ? "text-plum" : active ? "text-plum" : "text-slate hover:text-plum"
               }`}
             >

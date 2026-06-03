@@ -277,7 +277,7 @@ export default function LogPage() {
                   <button
                     type="button"
                     onClick={() => setPhotos((prev) => prev.filter((_, j) => j !== i))}
-                    className="absolute top-1 right-1 w-5 h-5 rounded-full bg-char/70 text-cream flex items-center justify-center text-[11px] leading-none"
+                    className="absolute top-1 right-1 w-7 h-7 rounded-full bg-char/70 text-cream flex items-center justify-center text-[14px] leading-none"
                   >
                     ×
                   </button>

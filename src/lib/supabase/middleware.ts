@@ -46,7 +46,26 @@ export async function updateSession(request: NextRequest) {
     data: { user },
   } = await supabase.auth.getUser();
 
-  const { pathname } = request.nextUrl;
+  const { pathname, searchParams } = request.nextUrl;
+
+  // Supabase may redirect auth codes to the root if the redirect URL isn't
+  // in the allowed list. Forward them to the callback handler.
+  if (pathname === '/' && searchParams.get('code')) {
+    const callbackUrl = request.nextUrl.clone();
+    callbackUrl.pathname = '/auth/callback';
+    callbackUrl.searchParams.set('code', searchParams.get('code')!);
+    callbackUrl.searchParams.set('next', '/settings/password');
+    return NextResponse.redirect(callbackUrl);
+  }
+
+  // Catch Supabase auth errors (e.g. expired password reset links) on the root
+  // and redirect to the reset-password page with a friendly message.
+  if (pathname === '/' && searchParams.get('error_code') === 'otp_expired') {
+    const resetUrl = request.nextUrl.clone();
+    resetUrl.pathname = '/reset-password';
+    resetUrl.search = '?expired=true';
+    return NextResponse.redirect(resetUrl);
+  }
 
   // Redirect unauthenticated users away from protected routes.
   if (!user && !isPublicRoute(pathname)) {

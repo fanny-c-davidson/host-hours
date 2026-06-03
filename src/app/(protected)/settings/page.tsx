@@ -101,6 +101,9 @@ export default function SettingsPage() {
   const [tierId, setTierId] = useState("free");
   const [propertyCount, setPropertyCount] = useState(0);
   const [periodEnd, setPeriodEnd] = useState<string | null>(null);
+  const [taxYear, setTaxYear] = useState(2026);
+  const [targetTest, setTargetTest] = useState("500");
+  const [goalHours, setGoalHours] = useState(500);
   const [loading, setLoading] = useState(true);
 
   useEffect(() => {
@@ -111,13 +114,16 @@ export default function SettingsPage() {
 
       const { data: profile } = await supabase
         .from("profiles")
-        .select("full_name, email")
+        .select("full_name, email, tax_year, target_test, goal_hours")
         .eq("id", user.id)
         .single();
 
       const name = profile?.full_name || user.user_metadata?.full_name || "";
       setFullName(name);
       setEmail(profile?.email || user.email || "");
+      if (profile?.tax_year) setTaxYear(profile.tax_year);
+      if (profile?.target_test) setTargetTest(profile.target_test);
+      if (profile?.goal_hours) setGoalHours(profile.goal_hours);
       const parts = name.split(" ").filter(Boolean);
       setInitials(
         parts.length >= 2
@@ -285,35 +291,14 @@ export default function SettingsPage() {
         {/* Tax settings */}
         <SectionBar>Tax settings</SectionBar>
         <Link href="/settings/tax">
-          <SettingRow label="Tax year" value="2026" arrow />
+          <SettingRow label="Tax year" value={String(taxYear)} arrow />
         </Link>
         <Link href="/settings/tax">
-          <SettingRow label="Target test" value="500 hours" arrow />
+          <SettingRow label="Target test" value={targetTest === "substantially" ? "Substantially all" : `${targetTest} hours`} arrow />
         </Link>
         <Link href="/settings/tax">
-          <SettingRow label="Annual goal" value="500 hours" arrow />
+          <SettingRow label="Annual goal" value={`${goalHours} hours`} arrow />
         </Link>
-
-        {/* Notifications */}
-        <SectionBar>Notifications</SectionBar>
-        <SettingRow
-          label="Push notifications"
-          sub="Reminders & milestones"
-          toggle
-          toggleOn
-        />
-        <SettingRow
-          label="Email reports"
-          sub="Monthly summary"
-          toggle
-          toggleOn
-        />
-        <SettingRow
-          label="SMS reminders"
-          sub="For end-of-day logging"
-          toggle
-          toggleOn={false}
-        />
 
         {/* Support */}
         <SectionBar>Support</SectionBar>
