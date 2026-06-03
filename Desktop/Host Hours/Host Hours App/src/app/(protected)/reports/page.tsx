@@ -5,9 +5,10 @@ import Link from "next/link";
 import { useSearchParams } from "next/navigation";
 import { TopStrip } from "@/components/top-strip";
 import { Dock } from "@/components/dock";
+import { PropertyFilter } from "@/components/property-filter";
 import { createClient } from "@/lib/supabase/client";
 
-type Property = { id: string; name: string };
+type Property = { id: string; name: string; tags: string[] };
 
 type TimeLog = {
   id: string;
@@ -47,17 +48,69 @@ function ReportsContent() {
   const [totalHours, setTotalHours] = useState(0);
   const [loading, setLoading] = useState(true);
   const [activeProp, setActiveProp] = useState("All properties");
-
-  const goalHours = 500;
+  const [activeTag, setActiveTag] = useState<string | null>(null);
+  const [goalHours, setGoalHours] = useState(500);
+  const [spouseLinked, setSpouseLinked] = useState(false);
+  const [spouseName, setSpouseName] = useState<string | null>(null);
+  const [spouseHours, setSpouseHours] = useState(0);
+  const [showCombined, setShowCombined] = useState(false);
+  const preselectedPropertyId = searchParams.get("property");
 
   useEffect(() => {
     async function load() {
       const supabase = createClient();
 
+      const { data: { user } } = await supabase.auth.getUser();
+      if (user) {
+        const { data: profile } = await supabase
+          .from("profiles")
+          .select("goal_hours")
+          .eq("id", user.id)
+          .single();
+        if (profile?.goal_hours) setGoalHours(profile.goal_hours);
+
+        // Check for active spouse link
+        const { data: sentLink } = await supabase
+          .from("spouse_links")
+          .select("partner_id, partner_email")
+          .eq("requester_id", user.id)
+          .eq("status", "active")
+          .limit(1)
+          .single();
+
+        const { data: receivedLink } = sentLink ? { data: null } : await supabase
+          .from("spouse_links")
+          .select("requester_id")
+          .eq("partner_id", user.id)
+          .eq("status", "active")
+          .limit(1)
+          .single();
+
+        const spouseId = sentLink?.partner_id ?? receivedLink?.requester_id ?? null;
+        if (spouseId) {
+          setSpouseLinked(true);
+          const { data: spouseProfile } = await supabase
+            .from("profiles")
+            .select("full_name")
+            .eq("id", spouseId)
+            .single();
+          const fullName = spouseProfile?.full_name;
+          setSpouseName(fullName ? fullName.split(" ")[0] : sentLink?.partner_email ?? null);
+
+          const { data: spouseLogs } = await supabase
+            .from("time_logs")
+            .select("duration_secs")
+            .eq("user_id", spouseId)
+            .is("deleted_at", null);
+          const sTotal = (spouseLogs ?? []).reduce((s, r) => s + (r.duration_secs ?? 0), 0);
+          setSpouseHours(sTotal / 3600);
+        }
+      }
+
       const [{ data: props }, { data: logs }] = await Promise.all([
         supabase
           .from("properties")
-          .select("id, name")
+          .select("id, name, tags")
           .is("deleted_at", null)
           .order("created_at", { ascending: false }),
         supabase
@@ -67,7 +120,14 @@ function ReportsContent() {
           .order("started_at", { ascending: false }),
       ]);
 
-      setProperties(props ?? []);
+      const allProps = props ?? [];
+      setProperties(allProps);
+
+      if (preselectedPropertyId) {
+        const match = allProps.find((p) => p.id === preselectedPropertyId);
+        if (match) setActiveProp(match.name);
+      }
+
       const entries = (logs as TimeLog[] | null) ?? [];
       setAllActivity(entries);
 
@@ -76,11 +136,15 @@ function ReportsContent() {
       setLoading(false);
     }
     load();
-  }, []);
+  }, [preselectedPropertyId]);
 
-  const propertyFilters = properties.length > 1
-    ? ["All properties", ...properties.map((p) => p.name)]
-    : [];
+  const allTags = Array.from(
+    new Set(properties.flatMap((p) => p.tags ?? [])),
+  ).sort();
+
+  const tagFilteredProperties = activeTag
+    ? properties.filter((p) => (p.tags ?? []).includes(activeTag))
+    : properties;
 
   const filteredActivity = activeProp === "All properties"
     ? allActivity
@@ -98,34 +162,35 @@ function ReportsContent() {
     .map(([name, hours]) => ({ name, hours, pct: filteredHours > 0 ? (hours / filteredHours) * 100 : 0 }))
     .sort((a, b) => b.hours - a.hours);
 
-  // IRS tests
-  const goalPct = goalHours > 0 ? Math.min((filteredHours / goalHours) * 100, 100) : 0;
-  const hoursRemaining = Math.max(goalHours - filteredHours, 0);
+  // IRS tests — use combined hours when spouse toggle is on
+  const irsHours = showCombined ? filteredHours + spouseHours : filteredHours;
+  const goalPct = goalHours > 0 ? Math.min((irsHours / goalHours) * 100, 100) : 0;
+  const hoursRemaining = Math.max(goalHours - irsHours, 0);
 
   const irsTests = [
     {
-      name: "500-Hour Test",
-      status: filteredHours >= 500 ? "Passed" : "In progress",
-      statusColor: filteredHours >= 500 ? "bg-success-bg text-success" : "bg-tangerine/10 text-tangerine",
-      detail: `${filteredHours.toFixed(1)} of 500 hours logged`,
-      barPct: Math.min((filteredHours / 500) * 100, 100),
-      barColor: filteredHours >= 500 ? "bg-success" : "bg-plum",
-      coach: filteredHours >= 500
-        ? "You've met the 500-hour material participation threshold."
-        : `${hoursRemaining.toFixed(0)} more hours needed to meet this test.`,
-      coachColor: filteredHours >= 500 ? "text-success" : "text-slate",
+      name: "500-Hour Benchmark",
+      status: irsHours >= 500 ? "Goal reached" : "In progress",
+      statusColor: irsHours >= 500 ? "bg-success-bg text-success" : "bg-tangerine/10 text-tangerine",
+      detail: `${irsHours.toFixed(1)} of 500 hours logged${showCombined ? " (combined)" : ""}`,
+      barPct: Math.min((irsHours / 500) * 100, 100),
+      barColor: irsHours >= 500 ? "bg-success" : "bg-plum",
+      coach: irsHours >= 500
+        ? "You've logged 500+ hours. Consult your tax advisor to confirm eligibility."
+        : `${hoursRemaining.toFixed(0)} more hours to reach this benchmark.`,
+      coachColor: irsHours >= 500 ? "text-success" : "text-slate",
     },
     {
-      name: "100-Hour Test",
-      status: filteredHours >= 100 ? "Passed" : "In progress",
-      statusColor: filteredHours >= 100 ? "bg-success-bg text-success" : "bg-tangerine/10 text-tangerine",
-      detail: `${filteredHours.toFixed(1)} of 100 hours logged`,
-      barPct: Math.min((filteredHours / 100) * 100, 100),
-      barColor: filteredHours >= 100 ? "bg-success" : "bg-plum",
-      coach: filteredHours >= 100
-        ? "You've logged 100+ hours. This test also requires that no one else participates more."
-        : `${Math.max(100 - filteredHours, 0).toFixed(0)} more hours needed.`,
-      coachColor: filteredHours >= 100 ? "text-success" : "text-slate",
+      name: "100-Hour Benchmark",
+      status: irsHours >= 100 ? "Goal reached" : "In progress",
+      statusColor: irsHours >= 100 ? "bg-success-bg text-success" : "bg-tangerine/10 text-tangerine",
+      detail: `${irsHours.toFixed(1)} of 100 hours logged${showCombined ? " (combined)" : ""}`,
+      barPct: Math.min((irsHours / 100) * 100, 100),
+      barColor: irsHours >= 100 ? "bg-success" : "bg-plum",
+      coach: irsHours >= 100
+        ? "You've logged 100+ hours. Additional criteria may apply — consult your tax advisor."
+        : `${Math.max(100 - irsHours, 0).toFixed(0)} more hours to reach this benchmark.`,
+      coachColor: irsHours >= 100 ? "text-success" : "text-slate",
     },
   ];
 
@@ -245,28 +310,17 @@ function ReportsContent() {
           <>
             {allActivity.length > 0 ? (
               <>
-                {/* Property filter */}
-                {propertyFilters.length > 0 && (
-                  <div className="px-7 py-4 flex gap-1.5 overflow-x-auto border-b border-chalk scrollbar-thin">
-                    {propertyFilters.map((f) => {
-                      const active = activeProp === f;
-                      return (
-                        <button
-                          key={f}
-                          type="button"
-                          onClick={() => setActiveProp(f)}
-                          className={`shrink-0 min-h-9 px-3.5 py-2 rounded-[999px] text-[13px] font-medium transition-colors ${
-                            active
-                              ? "bg-char text-cream border border-char"
-                              : "border border-chalk text-quill hover:border-stone"
-                          }`}
-                        >
-                          {f}
-                        </button>
-                      );
-                    })}
-                  </div>
-                )}
+                <PropertyFilter
+                  properties={properties}
+                  allTags={allTags}
+                  activeTag={activeTag}
+                  activeProp={activeProp}
+                  onTagChange={(tag) => {
+                    setActiveTag(tag);
+                    setActiveProp("All properties");
+                  }}
+                  onPropChange={setActiveProp}
+                />
 
                 {/* Summary */}
                 <div className="px-7 py-5 border-b border-chalk flex items-center justify-between">
@@ -350,41 +404,70 @@ function ReportsContent() {
           <>
             {hasReportData ? (
               <>
-                {/* Property filter */}
-                {propertyFilters.length > 0 && (
-                  <div className="px-7 py-4 flex gap-1.5 overflow-x-auto border-b border-chalk scrollbar-thin">
-                    {propertyFilters.map((f) => {
-                      const active = activeProp === f;
-                      return (
-                        <button
-                          key={f}
-                          type="button"
-                          onClick={() => setActiveProp(f)}
-                          className={`shrink-0 min-h-9 px-3.5 py-2 rounded-[999px] text-[13px] font-medium transition-colors ${
-                            active
-                              ? "bg-char text-cream border border-char"
-                              : "border border-chalk text-quill hover:border-stone"
-                          }`}
-                        >
-                          {f}
-                        </button>
-                      );
-                    })}
-                  </div>
-                )}
+                <PropertyFilter
+                  properties={properties}
+                  allTags={allTags}
+                  activeTag={activeTag}
+                  activeProp={activeProp}
+                  onTagChange={(tag) => {
+                    setActiveTag(tag);
+                    setActiveProp("All properties");
+                  }}
+                  onPropChange={setActiveProp}
+                />
 
                 {/* Hero stat */}
                 <section className="px-7 py-8 border-b border-chalk">
                   <p className="font-mono text-[10px] uppercase tracking-[1.5px] text-slate font-medium">
-                    Total &middot; 2026
+                    {showCombined ? "Combined total" : "Your total"} &middot; 2026
                   </p>
                   <div className="mt-2 flex items-baseline gap-2">
                     <span className="font-serif text-[88px] text-plum tabular-nums tracking-[-5px] leading-none">
-                      {filteredHours.toFixed(1)}
+                      {(showCombined ? filteredHours + spouseHours : filteredHours).toFixed(1)}
                     </span>
                     <span className="font-serif text-[26px] italic text-quill">hours</span>
                   </div>
+
+                  {showCombined && (
+                    <div className="mt-4 flex flex-col gap-1">
+                      <div className="flex justify-between text-[13px]">
+                        <span className="text-quill">You</span>
+                        <span className="text-char font-medium tabular-nums">{filteredHours.toFixed(1)}h</span>
+                      </div>
+                      <div className="flex justify-between text-[13px]">
+                        <span className="text-quill">{spouseName ?? "Spouse"}</span>
+                        <span className="text-char font-medium tabular-nums">{spouseHours.toFixed(1)}h</span>
+                      </div>
+                    </div>
+                  )}
                 </section>
+
+                {/* Spouse toggle */}
+                {spouseLinked && (
+                  <div className="px-7 py-4 border-b border-chalk flex items-center justify-between">
+                    <div>
+                      <span className="font-serif text-[15px] font-medium text-char block">
+                        Include spouse hours
+                      </span>
+                      <span className="text-[12px] text-slate">
+                        Combine with {spouseName ?? "spouse"} for tracking
+                      </span>
+                    </div>
+                    <button
+                      type="button"
+                      onClick={() => setShowCombined(!showCombined)}
+                      className={`relative w-11 h-7 rounded-[999px] shrink-0 transition-colors ${
+                        showCombined ? "bg-plum" : "bg-chalk"
+                      }`}
+                    >
+                      <span
+                        className={`absolute top-[3px] left-[3px] w-[22px] h-[22px] bg-cream rounded-full transition-transform ${
+                          showCombined ? "translate-x-4" : ""
+                        }`}
+                      />
+                    </button>
+                  </div>
+                )}
 
                 {/* IRS tests */}
                 {irsTests.map((test) => (
@@ -469,8 +552,8 @@ function ReportsContent() {
                   No data yet
                 </p>
                 <p className="font-sans text-[13px] text-quill leading-relaxed mb-8 max-w-[280px] mx-auto">
-                  Once you start logging hours, your IRS material participation
-                  tests and category breakdown will appear here.
+                  Once you start logging hours, your progress benchmarks
+                  and category breakdown will appear here.
                 </p>
                 <div className="flex flex-col gap-3 max-w-[240px] mx-auto">
                   <Link

@@ -104,7 +104,7 @@ export function TaskTypePicker({
                 <button
                   type="button"
                   onClick={() => handleDelete(t.id, t.name)}
-                  className="absolute -top-1 -right-1 w-5 h-5 rounded-full bg-tangerine text-cream flex items-center justify-center text-[11px] font-bold leading-none"
+                  className="absolute -top-1.5 -right-1.5 w-6 h-6 rounded-full bg-tangerine text-cream flex items-center justify-center text-[13px] font-bold leading-none"
                 >
                   ×
                 </button>
@@ -159,7 +159,7 @@ export function TaskTypePicker({
         <button
           type="button"
           onClick={() => { setEditMode(!editMode); setAdding(false); }}
-          className="font-mono text-[10px] uppercase tracking-[1.5px] text-slate hover:text-plum transition-colors"
+          className="font-mono text-[10px] uppercase tracking-[1.5px] text-slate hover:text-plum transition-colors min-h-[44px] py-2"
         >
           {editMode ? "Done editing" : "Edit list"}
         </button>

@@ -1,10 +1,25 @@
 "use client";
 
+import { useState } from "react";
 import { useRouter } from "next/navigation";
 import { TopStrip } from "@/components/top-strip";
 
+const SUPPORT_EMAIL = "relaxrechargerentals@gmail.com";
+
+const subjects: { value: string; label: string }[] = [
+  { value: "Billing & subscription", label: "Billing & subscription" },
+  { value: "Report a bug", label: "Report a bug" },
+  { value: "Feature request", label: "Feature request" },
+  { value: "Tax & IRS questions", label: "Tax & IRS questions" },
+  { value: "Other", label: "Other" },
+];
+
 export default function ContactPage() {
   const router = useRouter();
+  const [subject, setSubject] = useState("");
+  const [message, setMessage] = useState("");
+
+  const mailtoHref = `mailto:${SUPPORT_EMAIL}?subject=${encodeURIComponent(subject || "Host Hours support")}&body=${encodeURIComponent(message)}`;
 
   return (
     <div className="min-h-screen bg-cream pb-8">
@@ -19,29 +34,22 @@ export default function ContactPage() {
         </h1>
       </header>
 
-      <form
-        className="px-7 py-6 flex flex-col gap-6"
-        onSubmit={(e) => e.preventDefault()}
-      >
+      <div className="px-7 py-6 flex flex-col gap-6">
         {/* Subject */}
         <div>
           <label className="font-mono text-[10px] tracking-[1.5px] uppercase text-quill font-medium mb-2 block">
-            Subject <span className="text-tangerine">*</span>
+            Subject
           </label>
           <div className="relative">
             <select
-              required
-              defaultValue=""
+              value={subject}
+              onChange={(e) => setSubject(e.target.value)}
               className="w-full min-h-12 px-4 py-3.5 border border-chalk rounded-md text-[15px] text-char bg-cream focus:outline-none focus:border-plum focus:shadow-[0_0_0_4px] focus:shadow-plum-mist appearance-none pr-10"
             >
-              <option value="" disabled>
-                Select a topic
-              </option>
-              <option value="billing">Billing &amp; subscription</option>
-              <option value="bug">Report a bug</option>
-              <option value="feature">Feature request</option>
-              <option value="tax">Tax &amp; IRS questions</option>
-              <option value="other">Other</option>
+              <option value="">Select a topic</option>
+              {subjects.map((s) => (
+                <option key={s.value} value={s.value}>{s.label}</option>
+              ))}
             </select>
             <svg
               className="pointer-events-none absolute right-4 top-1/2 -translate-y-1/2 w-4 h-4 text-quill"
@@ -60,40 +68,25 @@ export default function ContactPage() {
         {/* Message */}
         <div>
           <label className="font-mono text-[10px] tracking-[1.5px] uppercase text-quill font-medium mb-2 block">
-            Message <span className="text-tangerine">*</span>
+            Message
           </label>
           <textarea
-            required
             rows={5}
+            value={message}
+            onChange={(e) => setMessage(e.target.value)}
             placeholder="Tell us how we can help..."
             className="w-full min-h-24 px-4 py-3.5 border border-chalk rounded-md text-[15px] text-char bg-cream focus:outline-none focus:border-plum focus:shadow-[0_0_0_4px] focus:shadow-plum-mist resize-vertical font-sans leading-relaxed"
           />
         </div>
 
-        {/* Attachment */}
-        <div>
-          <label className="font-mono text-[10px] tracking-[1.5px] uppercase text-quill font-medium mb-2 block">
-            Attachment
-          </label>
-          <div className="border border-dashed border-stone rounded-md p-7 text-center bg-cream">
-            <p className="font-serif text-[15px] font-medium text-char">
-              Drop a screenshot or file
-            </p>
-            <p className="mt-1 font-sans text-[12px] text-slate">
-              Optional. Helps us understand the issue faster.
-            </p>
-          </div>
-        </div>
-
         {/* Actions */}
         <div className="flex flex-col gap-3 mt-2">
-          <button
-            type="submit"
-            onClick={() => router.push("/settings")}
-            className="w-full min-h-12 bg-plum text-cream font-mono text-[11px] uppercase tracking-[1.5px] font-medium rounded-md hover:bg-plum-deep active:scale-[0.98] transition-all"
+          <a
+            href={mailtoHref}
+            className="w-full min-h-12 bg-plum text-cream font-mono text-[11px] uppercase tracking-[1.5px] font-medium rounded-md hover:bg-plum-deep active:scale-[0.98] transition-all flex items-center justify-center"
           >
-            Send message
-          </button>
+            Send
+          </a>
           <button
             type="button"
             onClick={() => router.back()}
@@ -102,7 +95,14 @@ export default function ContactPage() {
             Cancel
           </button>
         </div>
-      </form>
+
+        <p className="text-[12px] text-slate text-center">
+          You can also email us directly at{" "}
+          <a href={`mailto:${SUPPORT_EMAIL}`} className="text-plum underline decoration-tangerine underline-offset-[3px] decoration-[1.5px]">
+            {SUPPORT_EMAIL}
+          </a>
+        </p>
+      </div>
     </div>
   );
 }

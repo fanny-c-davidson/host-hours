@@ -10,6 +10,9 @@ type Property = {
   name: string;
   address: string | null;
   color: string;
+  latitude: number | null;
+  longitude: number | null;
+  geo_radius_meters: number;
 };
 
 type TimeLog = {
@@ -21,6 +24,17 @@ type TimeLog = {
   property: { name: string } | null;
 };
 
+function haversineMeters(lat1: number, lon1: number, lat2: number, lon2: number): number {
+  const R = 6371000;
+  const toRad = (d: number) => (d * Math.PI) / 180;
+  const dLat = toRad(lat2 - lat1);
+  const dLon = toRad(lon2 - lon1);
+  const a =
+    Math.sin(dLat / 2) ** 2 +
+    Math.cos(toRad(lat1)) * Math.cos(toRad(lat2)) * Math.sin(dLon / 2) ** 2;
+  return R * 2 * Math.atan2(Math.sqrt(a), Math.sqrt(1 - a));
+}
+
 export default function DashboardPage() {
   const [userName, setUserName] = useState("");
   const [userInitials, setUserInitials] = useState("");
@@ -29,8 +43,11 @@ export default function DashboardPage() {
   const [totalHours, setTotalHours] = useState(0);
   const [entriesLogged, setEntriesLogged] = useState(0);
   const [loading, setLoading] = useState(true);
-
-  const goalHours = 500;
+  const [allProperties, setAllProperties] = useState<Property[]>([]);
+  const [nearbyProperties, setNearbyProperties] = useState<Property[]>([]);
+  const [recentlyLoggedProperty, setRecentlyLoggedProperty] = useState<Property | null>(null);
+  const [geoChecked, setGeoChecked] = useState(false);
+  const [goalHours, setGoalHours] = useState(500);
   const goalPct = goalHours > 0 ? Math.min((totalHours / goalHours) * 100, 100) : 0;
 
   useEffect(() => {
@@ -42,12 +59,13 @@ export default function DashboardPage() {
 
       const { data: profile } = await supabase
         .from("profiles")
-        .select("full_name")
+        .select("full_name, goal_hours")
         .eq("id", user.id)
         .single();
 
       const fullName = profile?.full_name || user.user_metadata?.full_name || "there";
       setUserName(fullName.split(" ")[0]);
+      if (profile?.goal_hours) setGoalHours(profile.goal_hours);
       const parts = fullName.split(" ").filter(Boolean);
       setUserInitials(
         parts.length >= 2
@@ -57,12 +75,13 @@ export default function DashboardPage() {
 
       const { data: props } = await supabase
         .from("properties")
-        .select("id, name, address, color")
+        .select("id, name, address, color, latitude, longitude, geo_radius_meters")
         .is("deleted_at", null)
-        .order("created_at", { ascending: false })
-        .limit(3);
+        .order("created_at", { ascending: false });
 
-      setProperties(props ?? []);
+      const allProps = (props ?? []) as Property[];
+      setProperties(allProps.slice(0, 3));
+      setAllProperties(allProps);
 
       const { data: logs, count } = await supabase
         .from("time_logs")
@@ -86,6 +105,40 @@ export default function DashboardPage() {
     }
     load();
   }, []);
+
+  useEffect(() => {
+    if (allProperties.length === 0 || loading) return;
+
+    const mostRecentLog = recentActivity[0];
+    if (mostRecentLog?.property) {
+      const match = allProperties.find(
+        (p) => (p as Property & { name: string }).name === (mostRecentLog.property as { name: string }).name,
+      );
+      if (match) setRecentlyLoggedProperty(match);
+    }
+
+    if (!navigator.geolocation) {
+      setGeoChecked(true);
+      return;
+    }
+
+    navigator.geolocation.getCurrentPosition(
+      (position) => {
+        const { latitude: userLat, longitude: userLng } = position.coords;
+        const nearby = allProperties.filter((p) => {
+          if (p.latitude == null || p.longitude == null) return false;
+          const dist = haversineMeters(userLat, userLng, p.latitude, p.longitude);
+          return dist <= p.geo_radius_meters;
+        });
+        setNearbyProperties(nearby);
+        setGeoChecked(true);
+      },
+      () => {
+        setGeoChecked(true);
+      },
+      { enableHighAccuracy: true, timeout: 5000 },
+    );
+  }, [allProperties, loading, recentActivity]);
 
   const now = new Date();
   const dayName = now.toLocaleDateString("en-US", { weekday: "long" });
@@ -157,9 +210,9 @@ export default function DashboardPage() {
             Let&rsquo;s get started.
           </h2>
           <p className="font-sans text-[14px] text-quill leading-relaxed mb-8">
-            Add your first property to start tracking hours toward IRS material
-            participation. Every hour you log brings you closer to qualifying for
-            tax deductions.
+            Add your first property to start tracking your hosting hours.
+            Organized records can help when it&rsquo;s time to work with your
+            tax advisor.
           </p>
 
           <div className="flex flex-col gap-3">
@@ -213,7 +266,7 @@ export default function DashboardPage() {
                   Hit your goal
                 </span>
                 <span className="font-sans text-[12px] text-slate">
-                  Export an audit-ready report for your accountant.
+                  Export a detailed report to share with your tax advisor.
                 </span>
               </div>
             </div>
@@ -262,38 +315,23 @@ export default function DashboardPage() {
             )}
           </div>
 
-          <div className="mt-3 flex items-center justify-between">
+          <div className="mt-3">
             <span className="font-sans text-[12px] text-slate">
               {goalPct.toFixed(1)}% to {goalHours}-hour goal
             </span>
-            {entriesLogged > 0 && (
-              <Link
-                href="/reports"
-                className="font-mono text-[10px] uppercase tracking-[1px] text-tangerine"
-              >
-                View reports &rarr;
-              </Link>
-            )}
           </div>
         </section>
       )}
 
       {/* ── Properties Section ──────────────────────────────────── */}
-      {!isNewUser && (
+      {!isNewUser && hasProperties && geoChecked && (
         <section>
-          <div className="px-7 py-4 flex items-center justify-between border-b border-chalk">
-            <h2 className="font-serif text-[22px]">Your properties</h2>
-            <Link
-              href="/properties"
-              className="font-mono text-[10px] uppercase tracking-[1px] text-plum"
-            >
-              All &rarr;
-            </Link>
-          </div>
-
-          {hasProperties ? (
+          {nearbyProperties.length > 0 ? (
             <>
-              {properties.map((prop) => (
+              <div className="px-7 py-4 border-b border-chalk">
+                <h2 className="font-serif text-[22px]">You are at</h2>
+              </div>
+              {nearbyProperties.map((prop) => (
                 <div
                   key={prop.id}
                   className="px-7 py-[22px] border-b border-chalk flex items-center justify-between"
@@ -304,24 +342,27 @@ export default function DashboardPage() {
                       style={{ background: prop.color }}
                     />
                     <div className="flex flex-col gap-1">
-                      <span className="font-serif text-[19px] font-medium leading-snug">
+                      <Link
+                        href={`/reports?tab=activity&property=${prop.id}`}
+                        className="font-serif text-[19px] font-medium leading-snug hover:text-plum transition-colors"
+                      >
                         {prop.name}
-                      </span>
+                      </Link>
                       {prop.address && (
                         <span className="font-sans text-[12px] text-slate">
                           {prop.address}
                         </span>
                       )}
-                      <div className="flex items-center gap-3 mt-1">
+                      <div className="flex items-center gap-1 mt-1">
                         <Link
-                          href="/timer"
-                          className="font-mono text-[10px] uppercase tracking-[1px] text-plum underline decoration-tangerine underline-offset-3"
+                          href={`/timer?property=${prop.id}`}
+                          className="font-mono text-[10px] uppercase tracking-[1px] text-plum underline decoration-tangerine underline-offset-3 min-h-[44px] px-2 inline-flex items-center"
                         >
                           Start timer
                         </Link>
                         <Link
                           href="/log"
-                          className="font-mono text-[10px] uppercase tracking-[1px] text-plum underline decoration-tangerine underline-offset-3"
+                          className="font-mono text-[10px] uppercase tracking-[1px] text-plum underline decoration-tangerine underline-offset-3 min-h-[44px] px-2 inline-flex items-center"
                         >
                           Log hours
                         </Link>
@@ -330,27 +371,86 @@ export default function DashboardPage() {
                   </div>
                 </div>
               ))}
-              <div className="border-b border-chalk px-7 py-5 flex justify-center">
-                <Link
-                  href="/properties/new"
-                  className="font-mono text-[11px] uppercase tracking-[1px] text-plum underline decoration-tangerine underline-offset-3"
-                >
-                  + Add another property
-                </Link>
-              </div>
             </>
           ) : (
-            <div className="px-7 py-10 border-b border-chalk text-center">
-              <p className="font-serif text-[17px] text-quill mb-4">
-                No properties yet.
-              </p>
-              <Link
-                href="/properties/new"
-                className="inline-block min-h-12 px-6 py-3.5 rounded-md text-[15px] font-medium bg-plum text-cream hover:bg-plum-deep transition-colors"
-              >
-                Add your first property
-              </Link>
-            </div>
+            <>
+              <div className="px-7 py-4 border-b border-chalk">
+                <h2 className="font-serif text-[22px]">Recently-logged property</h2>
+              </div>
+              {recentlyLoggedProperty ? (
+                <div className="px-7 py-[22px] border-b border-chalk flex items-center justify-between">
+                  <div className="flex items-center gap-3">
+                    <span
+                      className="w-3 h-3 rounded-full shrink-0"
+                      style={{ background: recentlyLoggedProperty.color }}
+                    />
+                    <div className="flex flex-col gap-1">
+                      <Link
+                        href={`/reports?tab=activity&property=${recentlyLoggedProperty.id}`}
+                        className="font-serif text-[19px] font-medium leading-snug hover:text-plum transition-colors"
+                      >
+                        {recentlyLoggedProperty.name}
+                      </Link>
+                      {recentlyLoggedProperty.address && (
+                        <span className="font-sans text-[12px] text-slate">
+                          {recentlyLoggedProperty.address}
+                        </span>
+                      )}
+                      <div className="flex items-center gap-1 mt-1">
+                        <Link
+                          href={`/timer?property=${recentlyLoggedProperty.id}`}
+                          className="font-mono text-[10px] uppercase tracking-[1px] text-plum underline decoration-tangerine underline-offset-3 min-h-[44px] px-2 inline-flex items-center"
+                        >
+                          Start timer
+                        </Link>
+                        <Link
+                          href="/log"
+                          className="font-mono text-[10px] uppercase tracking-[1px] text-plum underline decoration-tangerine underline-offset-3 min-h-[44px] px-2 inline-flex items-center"
+                        >
+                          Log hours
+                        </Link>
+                      </div>
+                    </div>
+                  </div>
+                </div>
+              ) : (
+                <div className="px-7 py-[22px] border-b border-chalk">
+                  <div className="flex items-center gap-3">
+                    <span
+                      className="w-3 h-3 rounded-full shrink-0"
+                      style={{ background: allProperties[0]?.color ?? "#ccc" }}
+                    />
+                    <div className="flex flex-col gap-1">
+                      <Link
+                        href={`/reports?tab=activity&property=${allProperties[0]?.id}`}
+                        className="font-serif text-[19px] font-medium leading-snug hover:text-plum transition-colors"
+                      >
+                        {allProperties[0]?.name ?? "—"}
+                      </Link>
+                      {allProperties[0]?.address && (
+                        <span className="font-sans text-[12px] text-slate">
+                          {allProperties[0].address}
+                        </span>
+                      )}
+                      <div className="flex items-center gap-1 mt-1">
+                        <Link
+                          href={`/timer?property=${allProperties[0]?.id}`}
+                          className="font-mono text-[10px] uppercase tracking-[1px] text-plum underline decoration-tangerine underline-offset-3 min-h-[44px] px-2 inline-flex items-center"
+                        >
+                          Start timer
+                        </Link>
+                        <Link
+                          href="/log"
+                          className="font-mono text-[10px] uppercase tracking-[1px] text-plum underline decoration-tangerine underline-offset-3 min-h-[44px] px-2 inline-flex items-center"
+                        >
+                          Log hours
+                        </Link>
+                      </div>
+                    </div>
+                  </div>
+                </div>
+              )}
+            </>
           )}
         </section>
       )}
@@ -363,7 +463,7 @@ export default function DashboardPage() {
             {entriesLogged > 5 && (
               <Link
                 href="/reports?tab=activity"
-                className="font-mono text-[10px] uppercase tracking-[1px] text-plum"
+                className="font-mono text-[10px] uppercase tracking-[1px] text-plum min-h-[44px] inline-flex items-center px-2"
               >
                 All &rarr;
               </Link>

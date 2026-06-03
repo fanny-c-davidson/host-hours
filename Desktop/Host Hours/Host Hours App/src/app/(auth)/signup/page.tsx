@@ -81,7 +81,7 @@ export default function SignupPage() {
             <button
               type="button"
               onClick={() => setConfirmationSent(false)}
-              className="text-plum underline decoration-tangerine underline-offset-[3px] decoration-[1.5px]"
+              className="text-plum underline decoration-tangerine underline-offset-[3px] decoration-[1.5px] min-h-[44px] inline-flex items-center"
             >
               try again
             </button>
@@ -164,7 +164,7 @@ export default function SignupPage() {
               type="checkbox"
               checked={agreed}
               onChange={(e) => setAgreed(e.target.checked)}
-              className="mt-1 w-4 h-4 rounded border-chalk text-plum focus:ring-plum-mist accent-plum"
+              className="mt-0.5 w-6 h-6 rounded border-chalk text-plum focus:ring-plum-mist accent-plum shrink-0"
             />
             <span className="text-[13px] text-quill leading-snug">
               I agree to the{" "}

@@ -13,7 +13,7 @@ export function TopStrip({
     <div className="flex items-center justify-between px-7 pt-5 pb-1 shrink-0">
       <Link
         href={backHref}
-        className="inline-flex items-center gap-1.5 font-mono text-[11px] tracking-[1px] uppercase text-quill hover:text-plum py-2 px-0.5"
+        className="inline-flex items-center gap-1.5 font-mono text-[11px] tracking-[1px] uppercase text-quill hover:text-plum min-h-[44px] min-w-[44px] px-2"
       >
         <svg
           className="w-3 h-3"

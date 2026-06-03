@@ -3,15 +3,13 @@
 import { useEffect, useState } from "react";
 import { useRouter, useParams } from "next/navigation";
 import { TopStrip } from "@/components/top-strip";
+import { AddressInput } from "@/components/address-input";
+import { TagInput } from "@/components/tag-input";
 import { createClient } from "@/lib/supabase/client";
 
-const COLORS = [
-  { name: "Plum", value: "#4A148C" },
-  { name: "Tangerine", value: "#FF6B35" },
-  { name: "Teal", value: "#0F6E56" },
-  { name: "Slate", value: "#5F5E5A" },
-  { name: "Ocean", value: "#1565C0" },
-  { name: "Rose", value: "#AD1457" },
+const PRESET_COLORS = [
+  "#4A148C", "#FF6B35", "#0F6E56", "#5F5E5A",
+  "#1565C0", "#AD1457", "#F9A825", "#00695C",
 ];
 
 export default function EditPropertyPage() {
@@ -21,8 +19,12 @@ export default function EditPropertyPage() {
 
   const [name, setName] = useState("");
   const [address, setAddress] = useState("");
-  const [description, setDescription] = useState("");
-  const [selectedColor, setSelectedColor] = useState(COLORS[0].value);
+  const [latitude, setLatitude] = useState<number | null>(null);
+  const [longitude, setLongitude] = useState<number | null>(null);
+  const [selectedColor, setSelectedColor] = useState(PRESET_COLORS[0]);
+  const [customColor, setCustomColor] = useState("");
+  const [tags, setTags] = useState<string[]>([]);
+  const [allTags, setAllTags] = useState<string[]>([]);
   const [loading, setLoading] = useState(true);
   const [saving, setSaving] = useState(false);
   const [deleting, setDeleting] = useState(false);
@@ -30,15 +32,27 @@ export default function EditPropertyPage() {
   const [error, setError] = useState<string | null>(null);
   const [notFound, setNotFound] = useState(false);
 
+  const activeColor = customColor || selectedColor;
+
   useEffect(() => {
     async function load() {
       const supabase = createClient();
-      const { data } = await supabase
-        .from("properties")
-        .select("name, address, description, color")
-        .eq("id", id)
-        .is("deleted_at", null)
-        .single();
+      const [{ data }, { data: allProps }] = await Promise.all([
+        supabase
+          .from("properties")
+          .select("name, address, color, tags, latitude, longitude")
+          .eq("id", id)
+          .is("deleted_at", null)
+          .single(),
+        supabase
+          .from("properties")
+          .select("tags")
+          .is("deleted_at", null),
+      ]);
+
+      const tagSet = new Set<string>();
+      (allProps ?? []).forEach((p) => (p.tags ?? []).forEach((t: string) => tagSet.add(t)));
+      setAllTags(Array.from(tagSet).sort());
 
       if (!data) {
         setNotFound(true);
@@ -48,12 +62,26 @@ export default function EditPropertyPage() {
 
       setName(data.name);
       setAddress(data.address || "");
-      setDescription(data.description || "");
-      setSelectedColor(data.color || COLORS[0].value);
+      setLatitude(data.latitude ?? null);
+      setLongitude(data.longitude ?? null);
+      setTags(data.tags ?? []);
+
+      const color = data.color || PRESET_COLORS[0];
+      if (PRESET_COLORS.includes(color)) {
+        setSelectedColor(color);
+      } else {
+        setCustomColor(color);
+      }
+
       setLoading(false);
     }
     load();
   }, [id]);
+
+  function handlePresetClick(color: string) {
+    setSelectedColor(color);
+    setCustomColor("");
+  }
 
   async function handleSave(e: React.FormEvent<HTMLFormElement>) {
     e.preventDefault();
@@ -73,8 +101,10 @@ export default function EditPropertyPage() {
       .update({
         name: trimmedName,
         address: address.trim() || null,
-        description: description.trim() || null,
-        color: selectedColor,
+        color: activeColor,
+        tags,
+        latitude,
+        longitude,
       })
       .eq("id", id);
 
@@ -161,46 +191,58 @@ export default function EditPropertyPage() {
           <label className="block font-mono text-[10px] tracking-[1.5px] uppercase text-quill font-medium mb-2">
             Address
           </label>
-          <input
-            type="text"
+          <AddressInput
             value={address}
-            onChange={(e) => setAddress(e.target.value)}
-            className="w-full min-h-12 px-4 py-3.5 border border-chalk rounded-md text-[15px] text-char bg-cream focus:outline-none focus:border-plum focus:ring-4 focus:ring-plum-mist placeholder:text-stone"
-            placeholder="123 Ocean Drive, Miami, FL"
+            onChange={setAddress}
+            onSelect={(addr, lat, lng) => {
+              setAddress(addr);
+              setLatitude(lat);
+              setLongitude(lng);
+            }}
           />
         </div>
 
         <div className="mb-5">
           <label className="block font-mono text-[10px] tracking-[1.5px] uppercase text-quill font-medium mb-2">
-            Description
+            Tags
           </label>
-          <textarea
-            value={description}
-            onChange={(e) => setDescription(e.target.value)}
-            className="w-full min-h-24 px-4 py-3.5 border border-chalk rounded-md text-[15px] text-char bg-cream focus:outline-none focus:border-plum focus:ring-4 focus:ring-plum-mist placeholder:text-stone resize-vertical font-sans leading-relaxed"
-            placeholder="A short description of the property..."
-          />
+          <TagInput tags={tags} onChange={setTags} allTags={allTags} />
         </div>
 
         <div className="mb-8">
           <label className="block font-mono text-[10px] tracking-[1.5px] uppercase text-quill font-medium mb-3">
             Color
           </label>
-          <div className="flex gap-3">
-            {COLORS.map((c) => (
+          <div className="flex items-center gap-3">
+            {PRESET_COLORS.map((c) => (
               <button
-                key={c.value}
+                key={c}
                 type="button"
-                onClick={() => setSelectedColor(c.value)}
-                className={`w-10 h-10 rounded-full transition-all ${
-                  selectedColor === c.value
+                onClick={() => handlePresetClick(c)}
+                className={`w-11 h-11 rounded-full transition-all ${
+                  activeColor === c && !customColor
                     ? "ring-2 ring-offset-2 ring-offset-cream ring-plum scale-110"
                     : "hover:scale-105"
                 }`}
-                style={{ background: c.value }}
-                title={c.name}
+                style={{ background: c }}
               />
             ))}
+            <label
+              className={`relative w-10 h-10 rounded-full cursor-pointer transition-all overflow-hidden border-2 border-dashed border-stone hover:border-plum ${
+                customColor ? "ring-2 ring-offset-2 ring-offset-cream ring-plum scale-110 border-solid !border-transparent" : ""
+              }`}
+              style={customColor ? { background: customColor } : undefined}
+            >
+              {!customColor && (
+                <span className="absolute inset-0 flex items-center justify-center text-stone text-[16px] leading-none">+</span>
+              )}
+              <input
+                type="color"
+                className="absolute inset-0 opacity-0 cursor-pointer w-full h-full"
+                value={customColor || "#888888"}
+                onChange={(e) => setCustomColor(e.target.value)}
+              />
+            </label>
           </div>
         </div>
 

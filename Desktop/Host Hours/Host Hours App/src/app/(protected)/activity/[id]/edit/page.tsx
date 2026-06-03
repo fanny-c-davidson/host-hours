@@ -5,6 +5,7 @@ import { useRouter, useParams } from "next/navigation";
 import { TopStrip } from "@/components/top-strip";
 import { TaskTypePicker } from "@/components/task-type-picker";
 import { createClient } from "@/lib/supabase/client";
+import { uploadPhotos, deletePhoto, getSignedUrls } from "@/lib/photos";
 
 type Property = {
   id: string;
@@ -45,12 +46,30 @@ export default function EditActivityPage() {
   const [deleting, setDeleting] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [notFound, setNotFound] = useState(false);
+  const [existingPhotos, setExistingPhotos] = useState<{ id: string; storagePath: string; fileName: string; url: string }[]>([]);
+  const [newPhotos, setNewPhotos] = useState<{ file: File; preview: string }[]>([]);
+
+  function handleFileSelect(e: React.ChangeEvent<HTMLInputElement>) {
+    const files = Array.from(e.target.files ?? []);
+    const added = files.map((file) => ({
+      file,
+      preview: URL.createObjectURL(file),
+    }));
+    setNewPhotos((prev) => [...prev, ...added]);
+    e.target.value = "";
+  }
+
+  async function handleRemoveExisting(photoId: string, storagePath: string) {
+    const supabase = createClient();
+    await deletePhoto(supabase, photoId, storagePath);
+    setExistingPhotos((prev) => prev.filter((p) => p.id !== photoId));
+  }
 
   useEffect(() => {
     async function load() {
       const supabase = createClient();
 
-      const [{ data: props }, { data: entry }] = await Promise.all([
+      const [{ data: props }, { data: entry }, { data: photoRows }] = await Promise.all([
         supabase
           .from("properties")
           .select("id, name, address")
@@ -62,6 +81,10 @@ export default function EditActivityPage() {
           .eq("id", id)
           .is("deleted_at", null)
           .single(),
+        supabase
+          .from("time_log_photos")
+          .select("id, storage_path, file_name")
+          .eq("time_log_id", id),
       ]);
 
       setProperties(props ?? []);
@@ -70,6 +93,11 @@ export default function EditActivityPage() {
         setNotFound(true);
         setLoading(false);
         return;
+      }
+
+      if (photoRows && photoRows.length > 0) {
+        const signed = await getSignedUrls(supabase, photoRows);
+        setExistingPhotos(signed);
       }
 
       setPropertyId(entry.property_id);
@@ -118,6 +146,9 @@ export default function EditActivityPage() {
     const title = selectedCategories.join(", ");
     const categoryKey = selectedCategories.map((c) => c.toLowerCase().replace(/[/ ]+/g, "_")).join(",");
 
+    const supabaseForUser = createClient();
+    const { data: { user } } = await supabaseForUser.auth.getUser();
+
     const { error: updateError } = await supabase
       .from("time_logs")
       .update({
@@ -134,6 +165,10 @@ export default function EditActivityPage() {
       setError(updateError.message);
       setSaving(false);
       return;
+    }
+
+    if (newPhotos.length > 0 && user) {
+      await uploadPhotos(supabase, user.id, id, newPhotos);
     }
 
     router.push("/dashboard");
@@ -301,14 +336,59 @@ export default function EditActivityPage() {
           <label className="font-mono text-[10px] tracking-[1.5px] uppercase text-quill font-medium mb-2 block">
             Receipts or photos
           </label>
-          <div className="border border-dashed border-stone rounded-md p-7 text-center bg-cream">
-            <p className="font-serif text-[15px] font-medium text-char">
-              Drop a photo or receipt
-            </p>
-            <p className="mt-1 font-sans text-[12px] text-slate">
-              Optional. Audit-helpful.
-            </p>
+
+          {(existingPhotos.length > 0 || newPhotos.length > 0) && (
+            <div className="flex gap-3 overflow-x-auto pb-2 mb-3">
+              {existingPhotos.map((photo) => (
+                <div key={photo.id} className="relative shrink-0 w-20 h-20 rounded-md overflow-hidden border border-chalk">
+                  <img src={photo.url} alt={photo.fileName} className="w-full h-full object-cover" />
+                  <button
+                    type="button"
+                    onClick={() => handleRemoveExisting(photo.id, photo.storagePath)}
+                    className="absolute top-1 right-1 w-7 h-7 rounded-full bg-char/70 text-cream flex items-center justify-center text-[14px] leading-none"
+                  >
+                    ×
+                  </button>
+                </div>
+              ))}
+              {newPhotos.map((photo, i) => (
+                <div key={`new-${i}`} className="relative shrink-0 w-20 h-20 rounded-md overflow-hidden border border-chalk">
+                  <img src={photo.preview} alt="" className="w-full h-full object-cover" />
+                  <button
+                    type="button"
+                    onClick={() => setNewPhotos((prev) => prev.filter((_, j) => j !== i))}
+                    className="absolute top-1 right-1 w-7 h-7 rounded-full bg-char/70 text-cream flex items-center justify-center text-[14px] leading-none"
+                  >
+                    ×
+                  </button>
+                </div>
+              ))}
+            </div>
+          )}
+
+          <div className="grid grid-cols-2 gap-3">
+            <label className="flex items-center justify-center gap-2 border border-dashed border-stone rounded-md p-4 cursor-pointer hover:border-plum transition-colors">
+              <svg className="w-5 h-5 text-quill" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round">
+                <rect x="3" y="3" width="18" height="18" rx="2" />
+                <circle cx="8.5" cy="8.5" r="1.5" />
+                <path d="m21 15-5-5L5 21" />
+              </svg>
+              <span className="font-mono text-[10px] tracking-[1.5px] uppercase text-quill font-medium">Gallery</span>
+              <input type="file" accept="image/*" multiple className="hidden" onChange={handleFileSelect} />
+            </label>
+            <label className="flex items-center justify-center gap-2 border border-dashed border-stone rounded-md p-4 cursor-pointer hover:border-plum transition-colors">
+              <svg className="w-5 h-5 text-quill" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round">
+                <path d="M14.5 4h-5L7 7H4a2 2 0 0 0-2 2v9a2 2 0 0 0 2 2h16a2 2 0 0 0 2-2V9a2 2 0 0 0-2-2h-3l-2.5-3z" />
+                <circle cx="12" cy="13" r="3" />
+              </svg>
+              <span className="font-mono text-[10px] tracking-[1.5px] uppercase text-quill font-medium">Camera</span>
+              <input type="file" accept="image/*" capture="environment" className="hidden" onChange={handleFileSelect} />
+            </label>
           </div>
+
+          <p className="mt-2 text-[12px] text-slate">
+            Optional. Helpful for documentation.
+          </p>
         </div>
 
         {/* Actions */}

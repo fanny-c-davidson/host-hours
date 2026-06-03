@@ -33,7 +33,7 @@ export default function Home() {
         {/* ── Deck ── */}
         <p className="font-serif italic text-[17px] leading-relaxed text-quill mb-10">
           A quiet, meticulous time-tracker built for short-term-rental hosts who
-          need to prove material participation to the IRS.
+          want to document their participation hours.
         </p>
 
         {/* ── Promises ── */}
@@ -42,10 +42,10 @@ export default function Home() {
             <span className="font-mono text-[11px] text-tangerine mt-0.5">01</span>
             <div>
               <p className="font-medium text-[15px] text-plum leading-snug">
-                Pass the IRS tests.
+                Track toward your goal.
               </p>
               <p className="text-[13px] text-slate mt-0.5 leading-snug">
-                Material-participation tracking mapped to all seven tests.
+                Log hours with categories that map to common participation tests.
               </p>
             </div>
           </li>
@@ -53,10 +53,10 @@ export default function Home() {
             <span className="font-mono text-[11px] text-tangerine mt-0.5">02</span>
             <div>
               <p className="font-medium text-[15px] text-plum leading-snug">
-                Audit-ready exports.
+                Organized exports.
               </p>
               <p className="text-[13px] text-slate mt-0.5 leading-snug">
-                One-tap PDF and CSV reports your CPA will love.
+                One-tap PDF and CSV reports to share with your tax advisor.
               </p>
             </div>
           </li>

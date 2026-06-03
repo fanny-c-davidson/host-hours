@@ -29,6 +29,9 @@ export type Database = {
           full_name: string | null;
           avatar_url: string | null;
           timezone: string;
+          tax_year: number;
+          target_test: string;
+          goal_hours: number;
           created_at: string;
           updated_at: string;
         };
@@ -38,6 +41,9 @@ export type Database = {
           full_name?: string | null;
           avatar_url?: string | null;
           timezone?: string;
+          tax_year?: number;
+          target_test?: string;
+          goal_hours?: number;
           created_at?: string;
           updated_at?: string;
         };
@@ -46,6 +52,9 @@ export type Database = {
           full_name?: string | null;
           avatar_url?: string | null;
           timezone?: string;
+          tax_year?: number;
+          target_test?: string;
+          goal_hours?: number;
           updated_at?: string;
         };
       };
@@ -153,6 +162,7 @@ export type Database = {
           latitude: number | null;
           longitude: number | null;
           geo_radius_meters: number;
+          tags: string[];
           is_archived: boolean;
           archived_at: string | null;
           deleted_at: string | null;
@@ -169,6 +179,7 @@ export type Database = {
           latitude?: number | null;
           longitude?: number | null;
           geo_radius_meters?: number;
+          tags?: string[];
           is_archived?: boolean;
           archived_at?: string | null;
           deleted_at?: string | null;
@@ -180,6 +191,7 @@ export type Database = {
           address?: string | null;
           description?: string | null;
           color?: string;
+          tags?: string[];
           latitude?: number | null;
           longitude?: number | null;
           geo_radius_meters?: number;
@@ -327,6 +339,51 @@ export type Database = {
         };
         Update: {
           used_at?: string | null;
+        };
+      };
+      time_log_photos: {
+        Row: {
+          id: string;
+          time_log_id: string;
+          user_id: string;
+          storage_path: string;
+          file_name: string;
+          content_type: string | null;
+          file_size: number | null;
+          created_at: string;
+        };
+        Insert: {
+          id?: string;
+          time_log_id: string;
+          user_id: string;
+          storage_path: string;
+          file_name: string;
+          content_type?: string | null;
+          file_size?: number | null;
+          created_at?: string;
+        };
+        Update: never;
+      };
+      spouse_links: {
+        Row: {
+          id: string;
+          requester_id: string;
+          partner_email: string;
+          partner_id: string | null;
+          status: 'pending' | 'active';
+          created_at: string;
+        };
+        Insert: {
+          id?: string;
+          requester_id: string;
+          partner_email: string;
+          partner_id?: string | null;
+          status?: 'pending' | 'active';
+          created_at?: string;
+        };
+        Update: {
+          partner_id?: string | null;
+          status?: 'pending' | 'active';
         };
       };
       webhook_events: {
