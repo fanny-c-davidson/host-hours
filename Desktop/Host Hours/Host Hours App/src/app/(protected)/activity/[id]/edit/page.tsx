@@ -79,6 +79,7 @@ export default function EditActivityPage() {
           .from("time_logs")
           .select("*")
           .eq("id", id)
+          .eq("user_id", user.id)
           .is("deleted_at", null)
           .single(),
         supabase

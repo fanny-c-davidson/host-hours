@@ -86,6 +86,7 @@ export default function DashboardPage() {
       const { data: logs, count } = await supabase
         .from("time_logs")
         .select("id, title, category, started_at, duration_secs, property:properties(name)", { count: "exact" })
+        .eq("user_id", user.id)
         .is("deleted_at", null)
         .order("started_at", { ascending: false })
         .limit(5);
@@ -96,6 +97,7 @@ export default function DashboardPage() {
       const { data: sumData } = await supabase
         .from("time_logs")
         .select("duration_secs")
+        .eq("user_id", user.id)
         .is("deleted_at", null);
 
       const totalSecs = (sumData ?? []).reduce((sum, r) => sum + (r.duration_secs ?? 0), 0);

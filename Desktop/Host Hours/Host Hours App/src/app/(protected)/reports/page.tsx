@@ -116,6 +116,7 @@ function ReportsContent() {
         supabase
           .from("time_logs")
           .select("id, title, category, started_at, duration_secs, description, property:properties(name)")
+          .eq("user_id", user.id)
           .is("deleted_at", null)
           .order("started_at", { ascending: false }),
       ]);
