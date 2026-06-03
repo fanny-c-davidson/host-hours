@@ -23,7 +23,7 @@ const plans = [
     features: [
       "Up to 5 properties",
       "Unlimited logging & timer",
-      "PDF + CSV audit exports",
+      "PDF + CSV exports",
       "Team member tracking",
       "Priority email support",
     ],

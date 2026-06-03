@@ -187,8 +187,8 @@ export default function PropertiesPage() {
             No properties yet
           </p>
           <p className="font-sans text-[13px] text-quill leading-relaxed mb-8 max-w-[280px] mx-auto">
-            Add your first rental property to start tracking hours and working
-            toward your tax goal.
+            Add your first rental property to start tracking your hosting
+            hours.
           </p>
           <Link
             href="/properties/new"

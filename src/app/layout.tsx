@@ -19,9 +19,9 @@ const fraunces = Fraunces({
 });
 
 export const metadata: Metadata = {
-  title: "Host Hours — Track STR hosting hours for IRS material participation",
+  title: "Host Hours — Track STR hosting hours",
   description:
-    "Track the hours that earn their place — and the tax write-offs that come with them.",
+    "A meticulous time-tracker for short-term-rental hosts. Log hours, organize by property, and export reports.",
 };
 
 export default function RootLayout({

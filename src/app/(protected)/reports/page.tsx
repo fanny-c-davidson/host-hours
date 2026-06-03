@@ -168,27 +168,27 @@ function ReportsContent() {
 
   const irsTests = [
     {
-      name: "500-Hour Test",
-      status: irsHours >= 500 ? "Passed" : "In progress",
+      name: "500-Hour Benchmark",
+      status: irsHours >= 500 ? "Goal reached" : "In progress",
       statusColor: irsHours >= 500 ? "bg-success-bg text-success" : "bg-tangerine/10 text-tangerine",
       detail: `${irsHours.toFixed(1)} of 500 hours logged${showCombined ? " (combined)" : ""}`,
       barPct: Math.min((irsHours / 500) * 100, 100),
       barColor: irsHours >= 500 ? "bg-success" : "bg-plum",
       coach: irsHours >= 500
-        ? "You've met the 500-hour material participation threshold."
-        : `${hoursRemaining.toFixed(0)} more hours needed to meet this test.`,
+        ? "You've logged 500+ hours. Consult your tax advisor to confirm eligibility."
+        : `${hoursRemaining.toFixed(0)} more hours to reach this benchmark.`,
       coachColor: irsHours >= 500 ? "text-success" : "text-slate",
     },
     {
-      name: "100-Hour Test",
-      status: irsHours >= 100 ? "Passed" : "In progress",
+      name: "100-Hour Benchmark",
+      status: irsHours >= 100 ? "Goal reached" : "In progress",
       statusColor: irsHours >= 100 ? "bg-success-bg text-success" : "bg-tangerine/10 text-tangerine",
       detail: `${irsHours.toFixed(1)} of 100 hours logged${showCombined ? " (combined)" : ""}`,
       barPct: Math.min((irsHours / 100) * 100, 100),
       barColor: irsHours >= 100 ? "bg-success" : "bg-plum",
       coach: irsHours >= 100
-        ? "You've logged 100+ hours. This test also requires that no one else participates more."
-        : `${Math.max(100 - irsHours, 0).toFixed(0)} more hours needed.`,
+        ? "You've logged 100+ hours. Additional criteria may apply — consult your tax advisor."
+        : `${Math.max(100 - irsHours, 0).toFixed(0)} more hours to reach this benchmark.`,
       coachColor: irsHours >= 100 ? "text-success" : "text-slate",
     },
   ];
@@ -449,7 +449,7 @@ function ReportsContent() {
                         Include spouse hours
                       </span>
                       <span className="text-[12px] text-slate">
-                        Combine with {spouseName ?? "spouse"} for IRS tests
+                        Combine with {spouseName ?? "spouse"} for tracking
                       </span>
                     </div>
                     <button
@@ -551,8 +551,8 @@ function ReportsContent() {
                   No data yet
                 </p>
                 <p className="font-sans text-[13px] text-quill leading-relaxed mb-8 max-w-[280px] mx-auto">
-                  Once you start logging hours, your IRS material participation
-                  tests and category breakdown will appear here.
+                  Once you start logging hours, your progress benchmarks
+                  and category breakdown will appear here.
                 </p>
                 <div className="flex flex-col gap-3 max-w-[240px] mx-auto">
                   <Link

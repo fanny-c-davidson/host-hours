@@ -345,7 +345,7 @@ function TimerContent() {
             </div>
 
             <p className="mt-2 text-[12px] text-slate">
-              Optional. Audit-helpful.
+              Optional. Helpful for documentation.
             </p>
           </div>
         </div>

@@ -387,7 +387,7 @@ export default function EditActivityPage() {
           </div>
 
           <p className="mt-2 text-[12px] text-slate">
-            Optional. Audit-helpful.
+            Optional. Helpful for documentation.
           </p>
         </div>
 

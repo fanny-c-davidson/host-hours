@@ -6,9 +6,9 @@ import { TopStrip } from "@/components/top-strip";
 import { createClient } from "@/lib/supabase/client";
 
 const targetTests = [
-  { id: "500", label: "500 hours", description: "Most common. You must log 500+ hours of material participation." },
-  { id: "100", label: "100 hours", description: "You participate 100+ hours and no one else participates more." },
-  { id: "substantially", label: "Substantially all", description: "You perform 90%+ of all work on the activity." },
+  { id: "500", label: "500 hours", description: "Generally requires 500+ hours of participation. Consult your tax advisor." },
+  { id: "100", label: "100 hours", description: "Generally requires 100+ hours and that no one else participates more." },
+  { id: "substantially", label: "Substantially all", description: "Generally requires performing substantially all work on the activity." },
 ];
 
 type SpouseLink = {
@@ -403,8 +403,8 @@ export default function TaxSettingsPage() {
             Link a spouse.
           </h2>
           <p className="font-sans text-[13px] text-slate leading-relaxed mb-5">
-            The IRS allows spouses to combine hours for material participation tests.
-            Link your accounts to see combined totals on Reports.
+            Spouses may be able to combine participation hours. Consult your
+            tax advisor. Link accounts to see combined totals on Reports.
           </p>
 
           {spouseError && (

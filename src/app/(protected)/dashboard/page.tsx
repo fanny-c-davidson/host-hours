@@ -210,9 +210,9 @@ export default function DashboardPage() {
             Let&rsquo;s get started.
           </h2>
           <p className="font-sans text-[14px] text-quill leading-relaxed mb-8">
-            Add your first property to start tracking hours toward IRS material
-            participation. Every hour you log brings you closer to qualifying for
-            tax deductions.
+            Add your first property to start tracking your hosting hours.
+            Organized records can help when it&rsquo;s time to work with your
+            tax advisor.
           </p>
 
           <div className="flex flex-col gap-3">
@@ -266,7 +266,7 @@ export default function DashboardPage() {
                   Hit your goal
                 </span>
                 <span className="font-sans text-[12px] text-slate">
-                  Export an audit-ready report for your accountant.
+                  Export a detailed report to share with your tax advisor.
                 </span>
               </div>
             </div>
