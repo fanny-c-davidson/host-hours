@@ -54,6 +54,7 @@ function ReportsContent() {
   const [spouseName, setSpouseName] = useState<string | null>(null);
   const [spouseHours, setSpouseHours] = useState(0);
   const [showCombined, setShowCombined] = useState(false);
+  const [targetTest, setTargetTest] = useState("500");
   const preselectedPropertyId = searchParams.get("property");
 
   useEffect(() => {
@@ -64,10 +65,11 @@ function ReportsContent() {
       if (user) {
         const { data: profile } = await supabase
           .from("profiles")
-          .select("goal_hours")
+          .select("goal_hours, target_test")
           .eq("id", user.id)
           .single();
         if (profile?.goal_hours) setGoalHours(profile.goal_hours);
+        if (profile?.target_test) setTargetTest(profile.target_test);
 
         // Check for active spouse link
         const { data: sentLink } = await supabase
@@ -168,31 +170,51 @@ function ReportsContent() {
   const goalPct = goalHours > 0 ? Math.min((irsHours / goalHours) * 100, 100) : 0;
   const hoursRemaining = Math.max(goalHours - irsHours, 0);
 
-  const irsTests = [
+  const targetHours = targetTest === "substantially" ? null : parseInt(targetTest, 10);
+
+  const kpis = [
     {
-      name: "500-Hour Benchmark",
-      status: irsHours >= 500 ? "Goal reached" : "In progress",
-      statusColor: irsHours >= 500 ? "bg-success-bg text-success" : "bg-tangerine/10 text-tangerine",
-      detail: `${irsHours.toFixed(1)} of 500 hours logged${showCombined ? " (combined)" : ""}`,
-      barPct: Math.min((irsHours / 500) * 100, 100),
-      barColor: irsHours >= 500 ? "bg-success" : "bg-plum",
-      coach: irsHours >= 500
-        ? "You've logged 500+ hours. Consult your tax advisor to confirm eligibility."
-        : `${hoursRemaining.toFixed(0)} more hours to reach this benchmark.`,
-      coachColor: irsHours >= 500 ? "text-success" : "text-slate",
+      name: "Annual Goal",
+      target: goalHours,
+      status: irsHours >= goalHours ? "Goal reached" : "In progress",
+      statusColor: irsHours >= goalHours ? "bg-success-bg text-success" : "bg-tangerine/10 text-tangerine",
+      detail: `${irsHours.toFixed(1)} of ${goalHours} hours logged${showCombined ? " (combined)" : ""}`,
+      barPct: goalHours > 0 ? Math.min((irsHours / goalHours) * 100, 100) : 0,
+      barColor: irsHours >= goalHours ? "bg-success" : "bg-plum",
+      coach: irsHours >= goalHours
+        ? `You've reached your ${goalHours}-hour goal.`
+        : `${Math.max(goalHours - irsHours, 0).toFixed(0)} more hours to reach your goal.`,
+      coachColor: irsHours >= goalHours ? "text-success" : "text-slate",
     },
-    {
-      name: "100-Hour Benchmark",
-      status: irsHours >= 100 ? "Goal reached" : "In progress",
-      statusColor: irsHours >= 100 ? "bg-success-bg text-success" : "bg-tangerine/10 text-tangerine",
-      detail: `${irsHours.toFixed(1)} of 100 hours logged${showCombined ? " (combined)" : ""}`,
-      barPct: Math.min((irsHours / 100) * 100, 100),
-      barColor: irsHours >= 100 ? "bg-success" : "bg-plum",
-      coach: irsHours >= 100
-        ? "You've logged 100+ hours. Additional criteria may apply — consult your tax advisor."
-        : `${Math.max(100 - irsHours, 0).toFixed(0)} more hours to reach this benchmark.`,
-      coachColor: irsHours >= 100 ? "text-success" : "text-slate",
-    },
+    ...(targetHours
+      ? [
+          {
+            name: "Target Test",
+            target: targetHours,
+            status: irsHours >= targetHours ? "Goal reached" : "In progress",
+            statusColor: irsHours >= targetHours ? "bg-success-bg text-success" : "bg-tangerine/10 text-tangerine",
+            detail: `${irsHours.toFixed(1)} of ${targetHours} hours logged${showCombined ? " (combined)" : ""}`,
+            barPct: Math.min((irsHours / targetHours) * 100, 100),
+            barColor: irsHours >= targetHours ? "bg-success" : "bg-plum",
+            coach: irsHours >= targetHours
+              ? `You've logged ${targetHours}+ hours. Consult your tax advisor to confirm eligibility.`
+              : `${Math.max(targetHours - irsHours, 0).toFixed(0)} more hours to reach this benchmark.`,
+            coachColor: irsHours >= targetHours ? "text-success" : "text-slate",
+          },
+        ]
+      : [
+          {
+            name: "Target Test",
+            target: 0,
+            status: "Substantially all",
+            statusColor: "bg-tangerine/10 text-tangerine",
+            detail: `${irsHours.toFixed(1)} hours logged${showCombined ? " (combined)" : ""}`,
+            barPct: 100,
+            barColor: "bg-plum",
+            coach: "Your target is substantially all participation. Consult your tax advisor.",
+            coachColor: "text-slate" as const,
+          },
+        ]),
   ];
 
   function formatDayLabel(dateStr: string) {
@@ -470,8 +492,8 @@ function ReportsContent() {
                   </div>
                 )}
 
-                {/* IRS tests */}
-                {irsTests.map((test) => (
+                {/* KPIs */}
+                {kpis.map((test) => (
                   <div key={test.name} className="px-7 py-5 border-b border-chalk">
                     <div className="flex items-center justify-between mb-2">
                       <span className="font-serif text-[18px] font-medium text-char">
