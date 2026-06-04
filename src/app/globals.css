@@ -1,0 +1,107 @@
+@import "tailwindcss";
+
+:root {
+  --plum: #4A148C;
+  --plum-deep: #2E0B5C;
+  --plum-haze: #6B3FAE;
+  --plum-mist: rgba(74, 20, 140, 0.06);
+  --plum-fog: rgba(74, 20, 140, 0.12);
+
+  --tangerine: #FF6B35;
+  --tangerine-glow: rgba(255, 107, 53, 0.16);
+
+  --cream: #FBF8F1;
+  --paper: #F5EFE4;
+  --vellum: #EDE5D4;
+
+  --ink: #1A1A1A;
+  --char: #2C2C2A;
+  --quill: #5F5E5A;
+  --slate: #888780;
+  --stone: #B4B2A9;
+  --chalk: #D3D1C7;
+  --bone: #ECE7DC;
+
+  --success: #0F6E56;
+  --success-bg: #DCEBE4;
+  --warn: #B8550B;
+  --warn-bg: #F5E4D0;
+}
+
+@theme inline {
+  --color-plum: var(--plum);
+  --color-plum-deep: var(--plum-deep);
+  --color-plum-haze: var(--plum-haze);
+  --color-plum-mist: var(--plum-mist);
+  --color-plum-fog: var(--plum-fog);
+
+  --color-tangerine: var(--tangerine);
+  --color-tangerine-glow: var(--tangerine-glow);
+
+  --color-cream: var(--cream);
+  --color-paper: var(--paper);
+  --color-vellum: var(--vellum);
+
+  --color-ink: var(--ink);
+  --color-char: var(--char);
+  --color-quill: var(--quill);
+  --color-slate: var(--slate);
+  --color-stone: var(--stone);
+  --color-chalk: var(--chalk);
+  --color-bone: var(--bone);
+
+  --color-success: var(--success);
+  --color-success-bg: var(--success-bg);
+  --color-warn: var(--warn);
+  --color-warn-bg: var(--warn-bg);
+
+  --font-serif: var(--font-fraunces), 'Iowan Old Style', 'Georgia', serif;
+  --font-sans: var(--font-geist-sans), -apple-system, BlinkMacSystemFont, sans-serif;
+  --font-mono: var(--font-geist-mono), ui-monospace, 'SF Mono', monospace;
+
+  --radius-sm: 8px;
+  --radius-md: 12px;
+  --radius-lg: 20px;
+  --radius-xl: 28px;
+  --radius-pill: 999px;
+}
+
+html {
+  -webkit-font-smoothing: antialiased;
+  -moz-osx-font-smoothing: grayscale;
+}
+
+body {
+  font-family: var(--font-sans);
+  background: var(--paper);
+  color: var(--char);
+  line-height: 1.5;
+  font-feature-settings: "ss01", "cv11";
+}
+
+input, textarea, select {
+  font-family: inherit;
+}
+
+/* Scrollbar styling */
+.scrollbar-thin {
+  scrollbar-width: thin;
+  scrollbar-color: var(--chalk) transparent;
+}
+.scrollbar-thin::-webkit-scrollbar { width: 3px; }
+.scrollbar-thin::-webkit-scrollbar-thumb { background: var(--chalk); border-radius: 4px; }
+
+/* Tabular nums utility */
+.tabular-nums {
+  font-variant-numeric: tabular-nums;
+  font-feature-settings: "tnum" 1;
+}
+
+/* Timer pulse animation */
+@keyframes pulse-dot {
+  0%, 100% { opacity: 1; }
+  50% { opacity: 0.3; }
+}
+.animate-pulse-dot {
+  animation: pulse-dot 1.4s ease-in-out infinite;
+}
