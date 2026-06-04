@@ -53,6 +53,7 @@ function ReportsContent() {
   const [spouseLinked, setSpouseLinked] = useState(false);
   const [spouseName, setSpouseName] = useState<string | null>(null);
   const [spouseHours, setSpouseHours] = useState(0);
+  const [spouseActivity, setSpouseActivity] = useState<TimeLog[]>([]);
   const [showCombined, setShowCombined] = useState(false);
   const [targetTest, setTargetTest] = useState("500");
   const preselectedPropertyId = searchParams.get("property");
@@ -101,10 +102,13 @@ function ReportsContent() {
 
           const { data: spouseLogs } = await supabase
             .from("time_logs")
-            .select("duration_secs")
+            .select("id, title, category, started_at, duration_secs, description, property:properties(name)")
             .eq("user_id", spouseId)
-            .is("deleted_at", null);
-          const sTotal = (spouseLogs ?? []).reduce((s, r) => s + (r.duration_secs ?? 0), 0);
+            .is("deleted_at", null)
+            .order("started_at", { ascending: false });
+          const spouseEntries = (spouseLogs as TimeLog[] | null) ?? [];
+          setSpouseActivity(spouseEntries);
+          const sTotal = spouseEntries.reduce((s, r) => s + (r.duration_secs ?? 0), 0);
           setSpouseHours(sTotal / 3600);
         }
       }
@@ -155,14 +159,19 @@ function ReportsContent() {
 
   const filteredHours = filteredActivity.reduce((sum, e) => sum + (e.duration_secs ?? 0), 0) / 3600;
 
-  // Category breakdown
+  // Category breakdown — include spouse activity when combined
+  const combinedActivity = showCombined
+    ? [...filteredActivity, ...spouseActivity]
+    : filteredActivity;
+  const combinedHours = showCombined ? filteredHours + spouseHours : filteredHours;
+
   const catMap = new Map<string, number>();
-  for (const entry of filteredActivity) {
+  for (const entry of combinedActivity) {
     const name = entry.title || entry.category;
     catMap.set(name, (catMap.get(name) ?? 0) + (entry.duration_secs ?? 0) / 3600);
   }
   const categoryBreakdown = Array.from(catMap.entries())
-    .map(([name, hours]) => ({ name, hours, pct: filteredHours > 0 ? (hours / filteredHours) * 100 : 0 }))
+    .map(([name, hours]) => ({ name, hours, pct: combinedHours > 0 ? (hours / combinedHours) * 100 : 0 }))
     .sort((a, b) => b.hours - a.hours);
 
   // IRS tests — use combined hours when spouse toggle is on
