@@ -64,7 +64,7 @@ function ReportsContent() {
       const supabase = createClient();
 
       const { data: { user } } = await supabase.auth.getUser();
-      if (user) {
+      if (!user) return;
         const { data: profile } = await supabase
           .from("profiles")
           .select("full_name, goal_hours, target_test")
@@ -114,7 +114,6 @@ function ReportsContent() {
           const sTotal = spouseEntries.reduce((s, r) => s + (r.duration_secs ?? 0), 0);
           setSpouseHours(sTotal / 3600);
         }
-      }
 
       const [{ data: props }, { data: logs }] = await Promise.all([
         supabase
