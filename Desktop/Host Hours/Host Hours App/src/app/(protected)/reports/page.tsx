@@ -283,8 +283,12 @@ function ReportsContent() {
       return;
     }
 
-    const headers = ["Date", "Start Time", "Hours", "Category", "Property", "Notes"];
-    const rows = filteredActivity.map((entry) => {
+    const includingSpouse = showCombined && spouseActivity.length > 0;
+    const headers = includingSpouse
+      ? ["Date", "Start Time", "Hours", "Category", "Property", "Logged by", "Notes"]
+      : ["Date", "Start Time", "Hours", "Category", "Property", "Notes"];
+
+    function entryToRow(entry: TimeLog, loggedBy?: string) {
       const d = new Date(entry.started_at);
       const date = d.toLocaleDateString("en-US", { year: "numeric", month: "2-digit", day: "2-digit" });
       const time = d.toLocaleTimeString("en-US", { hour: "numeric", minute: "2-digit" });
@@ -292,10 +296,24 @@ function ReportsContent() {
       const category = entry.title || "";
       const property = entry.property?.name || "";
       const notes = entry.description || "";
-      return [date, time, hours, category, property, notes].map(escapeCsvField).join(",");
-    });
+      const fields = includingSpouse
+        ? [date, time, hours, category, property, loggedBy || "", notes]
+        : [date, time, hours, category, property, notes];
+      return fields.map(escapeCsvField).join(",");
+    }
 
-    const totalRow = ["", "", filteredHours.toFixed(2), "TOTAL", "", ""].join(",");
+    const allEntries = includingSpouse
+      ? [
+          ...filteredActivity.map((e) => ({ entry: e, by: userName })),
+          ...spouseActivity.map((e) => ({ entry: e, by: spouseName || "Spouse" })),
+        ].sort((a, b) => new Date(b.entry.started_at).getTime() - new Date(a.entry.started_at).getTime())
+      : filteredActivity.map((e) => ({ entry: e, by: "" }));
+
+    const rows = allEntries.map(({ entry, by }) => entryToRow(entry, by));
+    const exportTotal = includingSpouse ? filteredHours + spouseHours : filteredHours;
+    const totalRow = includingSpouse
+      ? ["", "", exportTotal.toFixed(2), "TOTAL", "", "", ""].join(",")
+      : ["", "", exportTotal.toFixed(2), "TOTAL", "", ""].join(",");
     const csv = [headers.join(","), ...rows, "", totalRow].join("\n");
 
     const res = await fetch("/api/email-report", {
