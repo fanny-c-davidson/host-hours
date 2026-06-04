@@ -50,6 +50,7 @@ function ReportsContent() {
   const [activeProp, setActiveProp] = useState("All properties");
   const [activeTag, setActiveTag] = useState<string | null>(null);
   const [goalHours, setGoalHours] = useState(500);
+  const [userName, setUserName] = useState("");
   const [spouseLinked, setSpouseLinked] = useState(false);
   const [spouseName, setSpouseName] = useState<string | null>(null);
   const [spouseHours, setSpouseHours] = useState(0);
@@ -66,9 +67,11 @@ function ReportsContent() {
       if (user) {
         const { data: profile } = await supabase
           .from("profiles")
-          .select("goal_hours, target_test")
+          .select("full_name, goal_hours, target_test")
           .eq("id", user.id)
           .single();
+        const fullName = profile?.full_name || user.user_metadata?.full_name || "";
+        setUserName(fullName.split(" ")[0]);
         if (profile?.goal_hours) setGoalHours(profile.goal_hours);
         if (profile?.target_test) setTargetTest(profile.target_test);
 
@@ -165,13 +168,29 @@ function ReportsContent() {
     : filteredActivity;
   const combinedHours = showCombined ? filteredHours + spouseHours : filteredHours;
 
-  const catMap = new Map<string, number>();
-  for (const entry of combinedActivity) {
+  const catMap = new Map<string, { total: number; mine: number; spouse: number }>();
+  for (const entry of filteredActivity) {
     const name = entry.title || entry.category;
-    catMap.set(name, (catMap.get(name) ?? 0) + (entry.duration_secs ?? 0) / 3600);
+    const prev = catMap.get(name) ?? { total: 0, mine: 0, spouse: 0 };
+    const h = (entry.duration_secs ?? 0) / 3600;
+    catMap.set(name, { total: prev.total + h, mine: prev.mine + h, spouse: prev.spouse });
+  }
+  if (showCombined) {
+    for (const entry of spouseActivity) {
+      const name = entry.title || entry.category;
+      const prev = catMap.get(name) ?? { total: 0, mine: 0, spouse: 0 };
+      const h = (entry.duration_secs ?? 0) / 3600;
+      catMap.set(name, { total: prev.total + h, mine: prev.mine, spouse: prev.spouse + h });
+    }
   }
   const categoryBreakdown = Array.from(catMap.entries())
-    .map(([name, hours]) => ({ name, hours, pct: combinedHours > 0 ? (hours / combinedHours) * 100 : 0 }))
+    .map(([name, { total, mine, spouse }]) => ({
+      name,
+      hours: total,
+      mine,
+      spouse,
+      pct: combinedHours > 0 ? (total / combinedHours) * 100 : 0,
+    }))
     .sort((a, b) => b.hours - a.hours);
 
   // IRS tests — use combined hours when spouse toggle is on
@@ -525,6 +544,12 @@ function ReportsContent() {
                               style={{ width: `${cat.pct}%` }}
                             />
                           </div>
+                          {showCombined && (cat.mine > 0 || cat.spouse > 0) && (
+                            <div className="flex gap-3 text-[11px] text-slate">
+                              {cat.mine > 0 && <span>{userName} {cat.mine.toFixed(1)}h</span>}
+                              {cat.spouse > 0 && <span>{spouseName} {cat.spouse.toFixed(1)}h</span>}
+                            </div>
+                          )}
                         </div>
                         <div className="flex items-baseline gap-0.5">
                           <span className="font-serif text-[18px] text-plum tabular-nums">
