@@ -68,6 +68,8 @@ export default function EditActivityPage() {
   useEffect(() => {
     async function load() {
       const supabase = createClient();
+      const { data: { user } } = await supabase.auth.getUser();
+      if (!user) return;
 
       const [{ data: props }, { data: entry }, { data: photoRows }] = await Promise.all([
         supabase
