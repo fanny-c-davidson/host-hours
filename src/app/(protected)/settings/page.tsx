@@ -104,6 +104,8 @@ export default function SettingsPage() {
   const [taxYear, setTaxYear] = useState(2026);
   const [targetTest, setTargetTest] = useState("500");
   const [goalHours, setGoalHours] = useState(500);
+  const [spouseName, setSpouseName] = useState<string | null>(null);
+  const [spouseStatus, setSpouseStatus] = useState<string | null>(null);
   const [loading, setLoading] = useState(true);
 
   useEffect(() => {
@@ -146,6 +148,33 @@ export default function SettingsPage() {
         .is("deleted_at", null);
 
       setPropertyCount(count ?? 0);
+
+      const { data: spouseLink } = await supabase
+        .from("spouse_links")
+        .select("status, requester_id, partner_id, partner_email")
+        .or(`requester_id.eq.${user.id},partner_id.eq.${user.id}`)
+        .limit(1)
+        .maybeSingle();
+
+      if (spouseLink) {
+        setSpouseStatus(spouseLink.status);
+        if (spouseLink.status === "active") {
+          const partnerId = spouseLink.requester_id === user.id
+            ? spouseLink.partner_id
+            : spouseLink.requester_id;
+          if (partnerId) {
+            const { data: partnerProfile } = await supabase
+              .from("profiles")
+              .select("full_name")
+              .eq("id", partnerId)
+              .single();
+            setSpouseName(partnerProfile?.full_name || spouseLink.partner_email);
+          }
+        } else {
+          setSpouseName(spouseLink.partner_email);
+        }
+      }
+
       setLoading(false);
     }
     load();
@@ -288,17 +317,70 @@ export default function SettingsPage() {
           <SettingRow label="Subscription & billing" sub={`${plan.name} plan`} arrow />
         </Link>
 
-        {/* Tax settings */}
-        <SectionBar>Tax settings</SectionBar>
-        <Link href="/settings/tax">
-          <SettingRow label="Tax year" value={String(taxYear)} arrow />
-        </Link>
-        <Link href="/settings/tax">
-          <SettingRow label="Target test" value={targetTest === "substantially" ? "Substantially all" : `${targetTest} hours`} arrow />
-        </Link>
-        <Link href="/settings/tax">
-          <SettingRow label="Annual goal" value={`${goalHours} hours`} arrow />
-        </Link>
+        {/* Tax & tracking */}
+        <SectionBar>Tax &amp; tracking</SectionBar>
+
+        <div className="mx-7 mt-4 p-6 border-[1.5px] border-chalk rounded-md bg-cream">
+          <div className="grid grid-cols-3 gap-4 mb-5">
+            <div>
+              <div className="font-mono text-[9px] tracking-[1.5px] uppercase text-slate mb-1">
+                Tax year
+              </div>
+              <div className="font-serif text-[20px] font-medium text-char tracking-[-0.3px]">
+                {taxYear}
+              </div>
+            </div>
+            <div>
+              <div className="font-mono text-[9px] tracking-[1.5px] uppercase text-slate mb-1">
+                Goal
+              </div>
+              <div className="font-serif text-[20px] font-medium text-char tracking-[-0.3px]">
+                {goalHours}
+                <span className="font-sans text-[12px] text-slate font-normal"> hrs</span>
+              </div>
+            </div>
+            <div>
+              <div className="font-mono text-[9px] tracking-[1.5px] uppercase text-slate mb-1">
+                Target
+              </div>
+              <div className="font-serif text-[15px] font-medium text-char tracking-[-0.2px] leading-snug">
+                {targetTest === "substantially" ? "Subst. all" : `${targetTest} hrs`}
+              </div>
+            </div>
+          </div>
+
+          <div className="border-t border-chalk pt-4 mb-5">
+            <div className="font-mono text-[9px] tracking-[1.5px] uppercase text-slate mb-1.5">
+              Spouse account
+            </div>
+            {spouseStatus === "active" && spouseName ? (
+              <div className="flex items-center gap-2">
+                <span className="w-2 h-2 rounded-full bg-success shrink-0" />
+                <span className="font-serif text-[15px] font-medium text-char tracking-[-0.2px]">
+                  Linked with {spouseName.split(" ")[0]}
+                </span>
+              </div>
+            ) : spouseStatus === "pending" ? (
+              <div className="flex items-center gap-2">
+                <span className="w-2 h-2 rounded-full bg-tangerine shrink-0" />
+                <span className="font-serif text-[15px] text-quill">
+                  Invite pending · {spouseName}
+                </span>
+              </div>
+            ) : (
+              <span className="font-serif text-[15px] text-slate italic">
+                Not linked
+              </span>
+            )}
+          </div>
+
+          <Link
+            href="/settings/tax"
+            className="block w-full min-h-12 py-3 rounded-md text-center font-mono text-[11px] tracking-[1.5px] uppercase text-plum border border-plum hover:bg-plum hover:text-cream active:scale-[0.98] transition-all"
+          >
+            Edit settings
+          </Link>
+        </div>
 
         {/* Support */}
         <SectionBar>Support</SectionBar>

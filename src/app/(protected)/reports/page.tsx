@@ -50,10 +50,13 @@ function ReportsContent() {
   const [activeProp, setActiveProp] = useState("All properties");
   const [activeTag, setActiveTag] = useState<string | null>(null);
   const [goalHours, setGoalHours] = useState(500);
+  const [userName, setUserName] = useState("");
   const [spouseLinked, setSpouseLinked] = useState(false);
   const [spouseName, setSpouseName] = useState<string | null>(null);
   const [spouseHours, setSpouseHours] = useState(0);
+  const [spouseActivity, setSpouseActivity] = useState<TimeLog[]>([]);
   const [showCombined, setShowCombined] = useState(false);
+  const [targetTest, setTargetTest] = useState("500");
   const preselectedPropertyId = searchParams.get("property");
 
   useEffect(() => {
@@ -61,13 +64,16 @@ function ReportsContent() {
       const supabase = createClient();
 
       const { data: { user } } = await supabase.auth.getUser();
-      if (user) {
+      if (!user) return;
         const { data: profile } = await supabase
           .from("profiles")
-          .select("goal_hours")
+          .select("full_name, goal_hours, target_test")
           .eq("id", user.id)
           .single();
+        const fullName = profile?.full_name || user.user_metadata?.full_name || "";
+        setUserName(fullName.split(" ")[0]);
         if (profile?.goal_hours) setGoalHours(profile.goal_hours);
+        if (profile?.target_test) setTargetTest(profile.target_test);
 
         // Check for active spouse link
         const { data: sentLink } = await supabase
@@ -94,17 +100,20 @@ function ReportsContent() {
             .select("full_name")
             .eq("id", spouseId)
             .single();
-          setSpouseName(spouseProfile?.full_name ?? sentLink?.partner_email ?? null);
+          const fullName = spouseProfile?.full_name;
+          setSpouseName(fullName ? fullName.split(" ")[0] : sentLink?.partner_email ?? null);
 
           const { data: spouseLogs } = await supabase
             .from("time_logs")
-            .select("duration_secs")
+            .select("id, title, category, started_at, duration_secs, description, property:properties(name)")
             .eq("user_id", spouseId)
-            .is("deleted_at", null);
-          const sTotal = (spouseLogs ?? []).reduce((s, r) => s + (r.duration_secs ?? 0), 0);
+            .is("deleted_at", null)
+            .order("started_at", { ascending: false });
+          const spouseEntries = (spouseLogs as TimeLog[] | null) ?? [];
+          setSpouseActivity(spouseEntries);
+          const sTotal = spouseEntries.reduce((s, r) => s + (r.duration_secs ?? 0), 0);
           setSpouseHours(sTotal / 3600);
         }
-      }
 
       const [{ data: props }, { data: logs }] = await Promise.all([
         supabase
@@ -115,6 +124,7 @@ function ReportsContent() {
         supabase
           .from("time_logs")
           .select("id, title, category, started_at, duration_secs, description, property:properties(name)")
+          .eq("user_id", user.id)
           .is("deleted_at", null)
           .order("started_at", { ascending: false }),
       ]);
@@ -151,14 +161,35 @@ function ReportsContent() {
 
   const filteredHours = filteredActivity.reduce((sum, e) => sum + (e.duration_secs ?? 0), 0) / 3600;
 
-  // Category breakdown
-  const catMap = new Map<string, number>();
+  // Category breakdown — include spouse activity when combined
+  const combinedActivity = showCombined
+    ? [...filteredActivity, ...spouseActivity]
+    : filteredActivity;
+  const combinedHours = showCombined ? filteredHours + spouseHours : filteredHours;
+
+  const catMap = new Map<string, { total: number; mine: number; spouse: number }>();
   for (const entry of filteredActivity) {
     const name = entry.title || entry.category;
-    catMap.set(name, (catMap.get(name) ?? 0) + (entry.duration_secs ?? 0) / 3600);
+    const prev = catMap.get(name) ?? { total: 0, mine: 0, spouse: 0 };
+    const h = (entry.duration_secs ?? 0) / 3600;
+    catMap.set(name, { total: prev.total + h, mine: prev.mine + h, spouse: prev.spouse });
+  }
+  if (showCombined) {
+    for (const entry of spouseActivity) {
+      const name = entry.title || entry.category;
+      const prev = catMap.get(name) ?? { total: 0, mine: 0, spouse: 0 };
+      const h = (entry.duration_secs ?? 0) / 3600;
+      catMap.set(name, { total: prev.total + h, mine: prev.mine, spouse: prev.spouse + h });
+    }
   }
   const categoryBreakdown = Array.from(catMap.entries())
-    .map(([name, hours]) => ({ name, hours, pct: filteredHours > 0 ? (hours / filteredHours) * 100 : 0 }))
+    .map(([name, { total, mine, spouse }]) => ({
+      name,
+      hours: total,
+      mine,
+      spouse,
+      pct: combinedHours > 0 ? (total / combinedHours) * 100 : 0,
+    }))
     .sort((a, b) => b.hours - a.hours);
 
   // IRS tests — use combined hours when spouse toggle is on
@@ -166,31 +197,51 @@ function ReportsContent() {
   const goalPct = goalHours > 0 ? Math.min((irsHours / goalHours) * 100, 100) : 0;
   const hoursRemaining = Math.max(goalHours - irsHours, 0);
 
-  const irsTests = [
+  const targetHours = targetTest === "substantially" ? null : parseInt(targetTest, 10);
+
+  const kpis = [
     {
-      name: "500-Hour Benchmark",
-      status: irsHours >= 500 ? "Goal reached" : "In progress",
-      statusColor: irsHours >= 500 ? "bg-success-bg text-success" : "bg-tangerine/10 text-tangerine",
-      detail: `${irsHours.toFixed(1)} of 500 hours logged${showCombined ? " (combined)" : ""}`,
-      barPct: Math.min((irsHours / 500) * 100, 100),
-      barColor: irsHours >= 500 ? "bg-success" : "bg-plum",
-      coach: irsHours >= 500
-        ? "You've logged 500+ hours. Consult your tax advisor to confirm eligibility."
-        : `${hoursRemaining.toFixed(0)} more hours to reach this benchmark.`,
-      coachColor: irsHours >= 500 ? "text-success" : "text-slate",
+      name: "Annual Goal",
+      target: goalHours,
+      status: irsHours >= goalHours ? "Goal reached" : "In progress",
+      statusColor: irsHours >= goalHours ? "bg-success-bg text-success" : "bg-tangerine/10 text-tangerine",
+      detail: `${irsHours.toFixed(1)} of ${goalHours} hours logged${showCombined ? " (combined)" : ""}`,
+      barPct: goalHours > 0 ? Math.min((irsHours / goalHours) * 100, 100) : 0,
+      barColor: irsHours >= goalHours ? "bg-success" : "bg-plum",
+      coach: irsHours >= goalHours
+        ? `You've reached your ${goalHours}-hour goal.`
+        : `${Math.max(goalHours - irsHours, 0).toFixed(0)} more hours to reach your goal.`,
+      coachColor: irsHours >= goalHours ? "text-success" : "text-slate",
     },
-    {
-      name: "100-Hour Benchmark",
-      status: irsHours >= 100 ? "Goal reached" : "In progress",
-      statusColor: irsHours >= 100 ? "bg-success-bg text-success" : "bg-tangerine/10 text-tangerine",
-      detail: `${irsHours.toFixed(1)} of 100 hours logged${showCombined ? " (combined)" : ""}`,
-      barPct: Math.min((irsHours / 100) * 100, 100),
-      barColor: irsHours >= 100 ? "bg-success" : "bg-plum",
-      coach: irsHours >= 100
-        ? "You've logged 100+ hours. Additional criteria may apply — consult your tax advisor."
-        : `${Math.max(100 - irsHours, 0).toFixed(0)} more hours to reach this benchmark.`,
-      coachColor: irsHours >= 100 ? "text-success" : "text-slate",
-    },
+    ...(targetHours
+      ? [
+          {
+            name: "Target Test",
+            target: targetHours,
+            status: irsHours >= targetHours ? "Goal reached" : "In progress",
+            statusColor: irsHours >= targetHours ? "bg-success-bg text-success" : "bg-tangerine/10 text-tangerine",
+            detail: `${irsHours.toFixed(1)} of ${targetHours} hours logged${showCombined ? " (combined)" : ""}`,
+            barPct: Math.min((irsHours / targetHours) * 100, 100),
+            barColor: irsHours >= targetHours ? "bg-success" : "bg-plum",
+            coach: irsHours >= targetHours
+              ? `You've logged ${targetHours}+ hours. Consult your tax advisor to confirm eligibility.`
+              : `${Math.max(targetHours - irsHours, 0).toFixed(0)} more hours to reach this benchmark.`,
+            coachColor: irsHours >= targetHours ? "text-success" : "text-slate",
+          },
+        ]
+      : [
+          {
+            name: "Target Test",
+            target: 0,
+            status: "Substantially all",
+            statusColor: "bg-tangerine/10 text-tangerine",
+            detail: `${irsHours.toFixed(1)} hours logged${showCombined ? " (combined)" : ""}`,
+            barPct: 100,
+            barColor: "bg-plum",
+            coach: "Your target is substantially all participation. Consult your tax advisor.",
+            coachColor: "text-slate" as const,
+          },
+        ]),
   ];
 
   function formatDayLabel(dateStr: string) {
@@ -231,8 +282,12 @@ function ReportsContent() {
       return;
     }
 
-    const headers = ["Date", "Start Time", "Hours", "Category", "Property", "Notes"];
-    const rows = filteredActivity.map((entry) => {
+    const includingSpouse = showCombined && spouseActivity.length > 0;
+    const headers = includingSpouse
+      ? ["Date", "Start Time", "Hours", "Category", "Property", "Logged by", "Notes"]
+      : ["Date", "Start Time", "Hours", "Category", "Property", "Notes"];
+
+    function entryToRow(entry: TimeLog, loggedBy?: string) {
       const d = new Date(entry.started_at);
       const date = d.toLocaleDateString("en-US", { year: "numeric", month: "2-digit", day: "2-digit" });
       const time = d.toLocaleTimeString("en-US", { hour: "numeric", minute: "2-digit" });
@@ -240,10 +295,24 @@ function ReportsContent() {
       const category = entry.title || "";
       const property = entry.property?.name || "";
       const notes = entry.description || "";
-      return [date, time, hours, category, property, notes].map(escapeCsvField).join(",");
-    });
+      const fields = includingSpouse
+        ? [date, time, hours, category, property, loggedBy || "", notes]
+        : [date, time, hours, category, property, notes];
+      return fields.map(escapeCsvField).join(",");
+    }
 
-    const totalRow = ["", "", filteredHours.toFixed(2), "TOTAL", "", ""].join(",");
+    const allEntries = includingSpouse
+      ? [
+          ...filteredActivity.map((e) => ({ entry: e, by: userName })),
+          ...spouseActivity.map((e) => ({ entry: e, by: spouseName || "Spouse" })),
+        ].sort((a, b) => new Date(b.entry.started_at).getTime() - new Date(a.entry.started_at).getTime())
+      : filteredActivity.map((e) => ({ entry: e, by: "" }));
+
+    const rows = allEntries.map(({ entry, by }) => entryToRow(entry, by));
+    const exportTotal = includingSpouse ? filteredHours + spouseHours : filteredHours;
+    const totalRow = includingSpouse
+      ? ["", "", exportTotal.toFixed(2), "TOTAL", "", "", ""].join(",")
+      : ["", "", exportTotal.toFixed(2), "TOTAL", "", ""].join(",");
     const csv = [headers.join(","), ...rows, "", totalRow].join("\n");
 
     const res = await fetch("/api/email-report", {
@@ -413,6 +482,9 @@ function ReportsContent() {
                     setActiveProp("All properties");
                   }}
                   onPropChange={setActiveProp}
+                  spouseName={spouseLinked ? spouseName : null}
+                  showCombined={showCombined}
+                  onToggleCombined={spouseLinked ? () => setShowCombined(!showCombined) : undefined}
                 />
 
                 {/* Hero stat */}
@@ -441,35 +513,8 @@ function ReportsContent() {
                   )}
                 </section>
 
-                {/* Spouse toggle */}
-                {spouseLinked && (
-                  <div className="px-7 py-4 border-b border-chalk flex items-center justify-between">
-                    <div>
-                      <span className="font-serif text-[15px] font-medium text-char block">
-                        Include spouse hours
-                      </span>
-                      <span className="text-[12px] text-slate">
-                        Combine with {spouseName ?? "spouse"} for tracking
-                      </span>
-                    </div>
-                    <button
-                      type="button"
-                      onClick={() => setShowCombined(!showCombined)}
-                      className={`relative w-11 h-7 rounded-[999px] shrink-0 transition-colors ${
-                        showCombined ? "bg-plum" : "bg-chalk"
-                      }`}
-                    >
-                      <span
-                        className={`absolute top-[3px] left-[3px] w-[22px] h-[22px] bg-cream rounded-full transition-transform ${
-                          showCombined ? "translate-x-4" : ""
-                        }`}
-                      />
-                    </button>
-                  </div>
-                )}
-
-                {/* IRS tests */}
-                {irsTests.map((test) => (
+                {/* KPIs */}
+                {kpis.map((test) => (
                   <div key={test.name} className="px-7 py-5 border-b border-chalk">
                     <div className="flex items-center justify-between mb-2">
                       <span className="font-serif text-[18px] font-medium text-char">
@@ -516,6 +561,12 @@ function ReportsContent() {
                               style={{ width: `${cat.pct}%` }}
                             />
                           </div>
+                          {showCombined && (cat.mine > 0 || cat.spouse > 0) && (
+                            <div className="flex gap-3 text-[11px] text-slate">
+                              {cat.mine > 0 && <span>{userName} {cat.mine.toFixed(1)}h</span>}
+                              {cat.spouse > 0 && <span>{spouseName} {cat.spouse.toFixed(1)}h</span>}
+                            </div>
+                          )}
                         </div>
                         <div className="flex items-baseline gap-0.5">
                           <span className="font-serif text-[18px] text-plum tabular-nums">
