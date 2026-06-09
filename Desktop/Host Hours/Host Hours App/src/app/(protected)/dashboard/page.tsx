@@ -112,6 +112,7 @@ function DashboardContent() {
       const { data: props } = await supabase
         .from("properties")
         .select("id, name, address, color, latitude, longitude, geo_radius_meters")
+        .eq("user_id", user.id)
         .is("deleted_at", null)
         .order("created_at", { ascending: false });
 
