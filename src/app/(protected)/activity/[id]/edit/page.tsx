@@ -11,6 +11,7 @@ type Property = {
   id: string;
   name: string;
   address: string | null;
+  isDeleted?: boolean;
 };
 
 function calcDuration(start: string, end: string): number | null {
@@ -90,13 +91,27 @@ export default function EditActivityPage() {
           .eq("time_log_id", id),
       ]);
 
-      setProperties(props ?? []);
+      const activeProps: Property[] = (props ?? []).map((p) => ({ ...p, isDeleted: false }));
 
       if (!entry) {
+        setProperties(activeProps);
         setNotFound(true);
         setLoading(false);
         return;
       }
+
+      const entryPropertyInList = activeProps.some((p) => p.id === entry.property_id);
+      if (!entryPropertyInList && entry.property_id) {
+        const { data: deletedProp } = await supabase
+          .from("properties")
+          .select("id, name, address")
+          .eq("id", entry.property_id)
+          .single();
+        if (deletedProp) {
+          activeProps.unshift({ ...deletedProp, isDeleted: true });
+        }
+      }
+      setProperties(activeProps);
 
       if (photoRows && photoRows.length > 0) {
         const signed = await getSignedUrls(supabase, photoRows);
@@ -132,10 +147,6 @@ export default function EditActivityPage() {
       setError("Please select a property.");
       return;
     }
-    if (selectedCategories.length === 0) {
-      setError("Please select at least one category.");
-      return;
-    }
     if (!duration || duration <= 0) {
       setError("Please enter a valid time range.");
       return;
@@ -146,8 +157,10 @@ export default function EditActivityPage() {
 
     const startedAt = new Date(`${date}T${startTime}:00`).toISOString();
     const durationSecs = Math.round(duration * 3600);
-    const title = selectedCategories.join(", ");
-    const categoryKey = selectedCategories.map((c) => c.toLowerCase().replace(/[/ ]+/g, "_")).join(",");
+    const title = selectedCategories.length > 0 ? selectedCategories.join(", ") : "General Task";
+    const categoryKey = selectedCategories.length > 0
+      ? selectedCategories.map((c) => c.toLowerCase().replace(/[/ ]+/g, "_")).join(",")
+      : "general_task";
 
     const supabaseForUser = createClient();
     const { data: { user } } = await supabaseForUser.auth.getUser();
@@ -245,7 +258,7 @@ export default function EditActivityPage() {
               </option>
               {properties.map((p) => (
                 <option key={p.id} value={p.id}>
-                  {p.name}{p.address ? ` — ${p.address}` : ""}
+                  {p.name}{p.isDeleted ? " (Deleted)" : ""}{p.address ? ` — ${p.address}` : ""}
                 </option>
               ))}
             </select>
@@ -303,8 +316,14 @@ export default function EditActivityPage() {
               Duration
             </span>
             <span className="font-serif text-[32px] text-plum tabular-nums leading-none">
-              {duration ? duration.toFixed(1) : "—"}{" "}
-              <span className="text-[16px] italic text-quill">hrs</span>
+              {duration
+                ? duration < 1.5
+                  ? `${Math.max(1, Math.ceil(duration * 60))}`
+                  : duration.toFixed(1)
+                : "—"}{" "}
+              <span className="text-[16px] italic text-quill">
+                {duration && duration < 1.5 ? "min" : "hrs"}
+              </span>
             </span>
           </div>
         </div>
@@ -312,7 +331,7 @@ export default function EditActivityPage() {
         {/* Category */}
         <div>
           <label className="font-mono text-[10px] tracking-[1.5px] uppercase text-quill font-medium mb-2 block">
-            What did you do? <span className="text-tangerine">*</span>
+            What did you do?
           </label>
           <TaskTypePicker
             selected={selectedCategories}

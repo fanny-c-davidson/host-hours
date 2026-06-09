@@ -17,7 +17,7 @@ type TimeLog = {
   started_at: string;
   duration_secs: number;
   description: string | null;
-  property: { name: string } | null;
+  property: { name: string; address: string | null } | null;
 };
 
 const CATEGORY_COLORS = [
@@ -82,7 +82,7 @@ function ReportsContent() {
           .eq("requester_id", user.id)
           .eq("status", "active")
           .limit(1)
-          .single();
+          .maybeSingle();
 
         const { data: receivedLink } = sentLink ? { data: null } : await supabase
           .from("spouse_links")
@@ -90,7 +90,7 @@ function ReportsContent() {
           .eq("partner_id", user.id)
           .eq("status", "active")
           .limit(1)
-          .single();
+          .maybeSingle();
 
         const spouseId = sentLink?.partner_id ?? receivedLink?.requester_id ?? null;
         if (spouseId) {
@@ -105,7 +105,7 @@ function ReportsContent() {
 
           const { data: spouseLogs } = await supabase
             .from("time_logs")
-            .select("id, title, category, started_at, duration_secs, description, property:properties(name)")
+            .select("id, title, category, started_at, duration_secs, description, property:properties(name, address)")
             .eq("user_id", spouseId)
             .is("deleted_at", null)
             .order("started_at", { ascending: false });
@@ -118,18 +118,21 @@ function ReportsContent() {
       const [{ data: props }, { data: logs }] = await Promise.all([
         supabase
           .from("properties")
-          .select("id, name, tags")
-          .is("deleted_at", null)
+          .select("id, name, tags, deleted_at")
           .order("created_at", { ascending: false }),
         supabase
           .from("time_logs")
-          .select("id, title, category, started_at, duration_secs, description, property:properties(name)")
+          .select("id, title, category, started_at, duration_secs, description, property:properties(name, address)")
           .eq("user_id", user.id)
           .is("deleted_at", null)
           .order("started_at", { ascending: false }),
       ]);
 
-      const allProps = props ?? [];
+      const entries = (logs as TimeLog[] | null) ?? [];
+      const namesWithEntries = new Set(entries.map((e) => e.property?.name).filter(Boolean));
+      const allProps = (props ?? [])
+        .filter((p) => !p.deleted_at || namesWithEntries.has(p.name))
+        .map(({ deleted_at: _, ...rest }) => rest);
       setProperties(allProps);
 
       if (preselectedPropertyId) {
@@ -137,7 +140,6 @@ function ReportsContent() {
         if (match) setActiveProp(match.name);
       }
 
-      const entries = (logs as TimeLog[] | null) ?? [];
       setAllActivity(entries);
 
       const total = entries.reduce((sum, e) => sum + (e.duration_secs ?? 0), 0);
@@ -183,6 +185,34 @@ function ReportsContent() {
     }
   }
   const categoryBreakdown = Array.from(catMap.entries())
+    .map(([name, { total, mine, spouse }]) => ({
+      name,
+      hours: total,
+      mine,
+      spouse,
+      pct: combinedHours > 0 ? (total / combinedHours) * 100 : 0,
+    }))
+    .sort((a, b) => b.hours - a.hours);
+
+  // Property breakdown
+  const propMap = new Map<string, { total: number; mine: number; spouse: number; address: string | null }>();
+  for (const entry of filteredActivity) {
+    const key = showCombined
+      ? (entry.property?.address || entry.property?.name || "Unknown")
+      : (entry.property?.name || "Unknown");
+    const prev = propMap.get(key) ?? { total: 0, mine: 0, spouse: 0, address: entry.property?.address ?? null };
+    const h = (entry.duration_secs ?? 0) / 3600;
+    propMap.set(key, { total: prev.total + h, mine: prev.mine + h, spouse: prev.spouse, address: prev.address || entry.property?.address || null });
+  }
+  if (showCombined) {
+    for (const entry of spouseActivity) {
+      const key = entry.property?.address || entry.property?.name || "Unknown";
+      const prev = propMap.get(key) ?? { total: 0, mine: 0, spouse: 0, address: entry.property?.address ?? null };
+      const h = (entry.duration_secs ?? 0) / 3600;
+      propMap.set(key, { total: prev.total + h, mine: prev.mine, spouse: prev.spouse + h, address: prev.address || entry.property?.address || null });
+    }
+  }
+  const propertyBreakdown = Array.from(propMap.entries())
     .map(([name, { total, mine, spouse }]) => ({
       name,
       hours: total,
@@ -410,7 +440,7 @@ function ReportsContent() {
                   >
                     <div
                       className="grid items-center gap-3"
-                      style={{ gridTemplateColumns: "56px 1fr auto" }}
+                      style={{ gridTemplateColumns: "72px 1fr auto" }}
                     >
                       <div className="flex flex-col">
                         <span className="font-mono text-[12px] font-bold text-char leading-tight">
@@ -571,6 +601,46 @@ function ReportsContent() {
                         <div className="flex items-baseline gap-0.5">
                           <span className="font-serif text-[18px] text-plum tabular-nums">
                             {cat.hours.toFixed(1)}
+                          </span>
+                          <span className="font-serif text-[13px] italic text-quill">h</span>
+                        </div>
+                      </div>
+                    ))}
+                  </>
+                )}
+
+                {/* By property */}
+                {propertyBreakdown.length > 0 && (
+                  <>
+                    <div className="px-7 py-4 border-b border-chalk">
+                      <h2 className="font-serif text-[22px] text-char">By property</h2>
+                    </div>
+                    {propertyBreakdown.map((prop, i) => (
+                      <div
+                        key={prop.name}
+                        className="px-7 py-4 border-b border-chalk grid items-center gap-3"
+                        style={{ gridTemplateColumns: "1fr auto" }}
+                      >
+                        <div className="flex flex-col gap-2">
+                          <span className="font-serif text-[15px] font-medium text-char">
+                            {prop.name}
+                          </span>
+                          <div className="h-[2px] rounded-full bg-bone">
+                            <div
+                              className={`h-full rounded-full ${CATEGORY_COLORS[(i + 3) % CATEGORY_COLORS.length]}`}
+                              style={{ width: `${prop.pct}%` }}
+                            />
+                          </div>
+                          {showCombined && (prop.mine > 0 || prop.spouse > 0) && (
+                            <div className="flex gap-3 text-[11px] text-slate">
+                              {prop.mine > 0 && <span>{userName} {prop.mine.toFixed(1)}h</span>}
+                              {prop.spouse > 0 && <span>{spouseName} {prop.spouse.toFixed(1)}h</span>}
+                            </div>
+                          )}
+                        </div>
+                        <div className="flex items-baseline gap-0.5">
+                          <span className="font-serif text-[18px] text-plum tabular-nums">
+                            {prop.hours.toFixed(1)}
                           </span>
                           <span className="font-serif text-[13px] italic text-quill">h</span>
                         </div>

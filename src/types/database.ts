@@ -208,7 +208,7 @@ export type Database = {
           property_id: string;
           title: string;
           description: string | null;
-          category: Database['public']['Enums']['time_log_category'];
+          category: string;
           started_at: string;
           ended_at: string;
           duration_secs: number;
@@ -224,10 +224,10 @@ export type Database = {
           property_id: string;
           title: string;
           description?: string | null;
-          category?: Database['public']['Enums']['time_log_category'];
+          category?: string;
           started_at: string;
           ended_at: string;
-          // duration_secs is GENERATED ALWAYS AS — never pass this in Insert
+          duration_secs?: number;
           is_billable?: boolean;
           source?: string;
           deleted_at?: string | null;
@@ -237,9 +237,10 @@ export type Database = {
         Update: {
           title?: string;
           description?: string | null;
-          category?: Database['public']['Enums']['time_log_category'];
+          category?: string;
           started_at?: string;
           ended_at?: string;
+          duration_secs?: number;
           is_billable?: boolean;
           deleted_at?: string | null;
           updated_at?: string;
@@ -252,7 +253,7 @@ export type Database = {
           property_id: string;
           title: string;
           description: string | null;
-          category: Database['public']['Enums']['time_log_category'];
+          category: string;
           is_billable: boolean;
           started_at: string;
           source: string;
@@ -264,13 +265,19 @@ export type Database = {
           property_id: string;
           title: string;
           description?: string | null;
-          category?: Database['public']['Enums']['time_log_category'];
+          category?: string;
           is_billable?: boolean;
           started_at?: string;
           source?: string;
           created_at?: string;
         };
-        Update: never; // active_timers rows are only created or deleted
+        Update: {
+          property_id?: string;
+          title?: string;
+          description?: string | null;
+          category?: string;
+          is_billable?: boolean;
+        };
       };
       team_members: {
         Row: {

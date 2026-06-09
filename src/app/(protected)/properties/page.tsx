@@ -11,6 +11,7 @@ type Property = {
   address: string | null;
   color: string;
   tags: string[];
+  isDeleted?: boolean;
 };
 
 export default function PropertiesPage() {
@@ -21,13 +22,27 @@ export default function PropertiesPage() {
   useEffect(() => {
     async function load() {
       const supabase = createClient();
-      const { data } = await supabase
-        .from("properties")
-        .select("id, name, address, color, tags")
-        .is("deleted_at", null)
-        .order("created_at", { ascending: false });
+      const { data: { user } } = await supabase.auth.getUser();
+      if (!user) return;
 
-      setProperties((data as Property[] | null) ?? []);
+      const [{ data: allProps }, { data: logs }] = await Promise.all([
+        supabase
+          .from("properties")
+          .select("id, name, address, color, tags, deleted_at")
+          .order("created_at", { ascending: false }),
+        supabase
+          .from("time_logs")
+          .select("property_id")
+          .eq("user_id", user.id)
+          .is("deleted_at", null),
+      ]);
+
+      const propertyIdsWithEntries = new Set((logs ?? []).map((l) => l.property_id));
+      const result = (allProps ?? [])
+        .filter((p) => !p.deleted_at || propertyIdsWithEntries.has(p.id))
+        .map(({ deleted_at, ...rest }) => ({ ...rest, isDeleted: !!deleted_at }));
+
+      setProperties(result);
       setLoading(false);
     }
     load();
@@ -37,9 +52,10 @@ export default function PropertiesPage() {
     new Set(properties.flatMap((p) => p.tags ?? [])),
   ).sort();
 
-  const filtered = activeTag
+  const filtered = (activeTag
     ? properties.filter((p) => (p.tags ?? []).includes(activeTag))
-    : properties;
+    : properties
+  ).sort((a, b) => (a.isDeleted ? 1 : 0) - (b.isDeleted ? 1 : 0));
 
   return (
     <div className="min-h-screen bg-cream pb-24">
@@ -72,7 +88,12 @@ export default function PropertiesPage() {
             Your properties
           </h1>
           <span className="font-mono text-[11px] tracking-[0.5px] text-slate tabular-nums">
-            {filtered.length} {activeTag ? `of ${properties.length}` : "total"}
+            {(() => {
+              const active = filtered.filter((p) => !p.isDeleted).length;
+              const deleted = filtered.filter((p) => p.isDeleted).length;
+              if (deleted === 0) return `${active} active`;
+              return `${active} active, ${deleted} deleted`;
+            })()}
           </span>
         </div>
 
@@ -123,7 +144,7 @@ export default function PropertiesPage() {
         filtered.map((prop) => (
           <div
             key={prop.id}
-            className="px-7 py-[22px] border-b border-chalk flex items-center justify-between hover:bg-vellum transition-colors"
+            className={`px-7 py-[22px] border-b border-chalk flex items-center justify-between transition-colors ${prop.isDeleted ? "opacity-60" : "hover:bg-vellum"}`}
           >
             <div className="flex items-center gap-3">
               <span
@@ -131,9 +152,16 @@ export default function PropertiesPage() {
                 style={{ background: prop.color }}
               />
               <div className="flex flex-col gap-1">
-                <span className="font-serif text-[19px] font-medium text-char tracking-[-0.3px]">
-                  {prop.name}
-                </span>
+                <div className="flex items-center gap-2">
+                  <span className="font-serif text-[19px] font-medium text-char tracking-[-0.3px]">
+                    {prop.name}
+                  </span>
+                  {prop.isDeleted && (
+                    <span className="px-2 py-0.5 rounded-full bg-stone/20 text-[10px] font-mono uppercase tracking-[1px] text-slate">
+                      Deleted
+                    </span>
+                  )}
+                </div>
                 {prop.address && (
                   <span className="font-sans text-[12px] text-slate">
                     {prop.address}
@@ -151,26 +179,28 @@ export default function PropertiesPage() {
                     ))}
                   </div>
                 )}
-                <div className="flex items-center gap-1 mt-1">
-                  <Link
-                    href={`/properties/${prop.id}/edit`}
-                    className="font-mono text-[10px] uppercase tracking-[1.5px] text-slate hover:text-plum min-h-[44px] px-2 inline-flex items-center"
-                  >
-                    Edit
-                  </Link>
-                  <Link
-                    href={`/timer?property=${prop.id}`}
-                    className="font-mono text-[10px] uppercase tracking-[1.5px] text-plum underline decoration-tangerine underline-offset-4 decoration-[1.5px] hover:text-plum-deep min-h-[44px] px-2 inline-flex items-center"
-                  >
-                    Start timer
-                  </Link>
-                  <Link
-                    href="/log"
-                    className="font-mono text-[10px] uppercase tracking-[1.5px] text-plum underline decoration-tangerine underline-offset-4 decoration-[1.5px] hover:text-plum-deep min-h-[44px] px-2 inline-flex items-center"
-                  >
-                    Log hours
-                  </Link>
-                </div>
+                {!prop.isDeleted && (
+                  <div className="flex items-center gap-1 mt-1">
+                    <Link
+                      href={`/properties/${prop.id}/edit`}
+                      className="font-mono text-[10px] uppercase tracking-[1.5px] text-slate hover:text-plum min-h-[44px] px-2 inline-flex items-center"
+                    >
+                      Edit
+                    </Link>
+                    <Link
+                      href={`/timer?property=${prop.id}`}
+                      className="font-mono text-[10px] uppercase tracking-[1.5px] text-plum underline decoration-tangerine underline-offset-4 decoration-[1.5px] hover:text-plum-deep min-h-[44px] px-2 inline-flex items-center"
+                    >
+                      Start timer
+                    </Link>
+                    <Link
+                      href="/log"
+                      className="font-mono text-[10px] uppercase tracking-[1.5px] text-plum underline decoration-tangerine underline-offset-4 decoration-[1.5px] hover:text-plum-deep min-h-[44px] px-2 inline-flex items-center"
+                    >
+                      Log hours
+                    </Link>
+                  </div>
+                )}
               </div>
             </div>
           </div>

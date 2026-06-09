@@ -71,11 +71,19 @@ export function Dock() {
               key={item.href}
               href={item.href}
               className={`flex flex-col items-center gap-1 py-2.5 px-2 min-w-[44px] min-h-[44px] justify-center transition-colors ${
-                item.isCenter ? "text-plum" : active ? "text-plum" : "text-slate hover:text-plum"
+                item.isCenter ? "text-cream" : active ? "text-plum" : "text-slate hover:text-plum"
               }`}
             >
-              <span className={item.isCenter ? "w-6 h-6" : "w-5 h-5"}>{item.icon}</span>
-              <span className="font-mono text-[9px] tracking-[1px] uppercase font-medium">
+              {item.isCenter ? (
+                <span className="w-10 h-10 rounded-full bg-plum flex items-center justify-center shadow-sm">
+                  <span className="w-5 h-5">{item.icon}</span>
+                </span>
+              ) : (
+                <span className="w-5 h-5">{item.icon}</span>
+              )}
+              <span className={`font-mono text-[9px] tracking-[1px] uppercase font-medium ${
+                item.isCenter ? "text-plum" : ""
+              }`}>
                 {item.label}
               </span>
             </Link>

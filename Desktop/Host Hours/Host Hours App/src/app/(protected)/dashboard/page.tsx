@@ -1,8 +1,10 @@
 "use client";
 
 import Link from "next/link";
-import { useEffect, useState } from "react";
+import { Suspense, useEffect, useState } from "react";
+import { useSearchParams } from "next/navigation";
 import { Dock } from "@/components/dock";
+import { PostSaveSheet } from "@/components/post-save-sheet";
 import { createClient } from "@/lib/supabase/client";
 
 type Property = {
@@ -36,6 +38,24 @@ function haversineMeters(lat1: number, lon1: number, lat2: number, lon2: number)
 }
 
 export default function DashboardPage() {
+  return (
+    <Suspense
+      fallback={
+        <div className="min-h-screen bg-cream pb-24 flex items-center justify-center">
+          <span className="w-6 h-6 border-2 border-plum border-t-transparent rounded-full animate-spin" />
+          <Dock />
+        </div>
+      }
+    >
+      <DashboardContent />
+    </Suspense>
+  );
+}
+
+function DashboardContent() {
+  const searchParams = useSearchParams();
+  const savedEntryId = searchParams.get("saved");
+
   const [userName, setUserName] = useState("");
   const [userInitials, setUserInitials] = useState("");
   const [properties, setProperties] = useState<Property[]>([]);
@@ -48,6 +68,22 @@ export default function DashboardPage() {
   const [recentlyLoggedProperty, setRecentlyLoggedProperty] = useState<Property | null>(null);
   const [geoChecked, setGeoChecked] = useState(false);
   const [goalHours, setGoalHours] = useState(500);
+
+  const [activeTimer, setActiveTimer] = useState<{
+    id: string;
+    startedAt: string;
+    propertyName: string;
+    propertyId: string;
+  } | null>(null);
+  const [timerElapsed, setTimerElapsed] = useState(0);
+  const [miniTimerStarting, setMiniTimerStarting] = useState(false);
+  const [miniTimerStopping, setMiniTimerStopping] = useState(false);
+  const [postSaveEntry, setPostSaveEntry] = useState<{
+    id: string;
+    durationSecs: number;
+    propertyName: string;
+  } | null>(null);
+
   const goalPct = goalHours > 0 ? Math.min((totalHours / goalHours) * 100, 100) : 0;
 
   useEffect(() => {
@@ -103,6 +139,22 @@ export default function DashboardPage() {
       const totalSecs = (sumData ?? []).reduce((sum, r) => sum + (r.duration_secs ?? 0), 0);
       setTotalHours(totalSecs / 3600);
 
+      const { data: timerData } = await supabase
+        .from("active_timers")
+        .select("id, property_id, started_at")
+        .eq("user_id", user.id)
+        .maybeSingle();
+
+      if (timerData) {
+        const prop = allProps.find((p) => p.id === timerData.property_id);
+        setActiveTimer({
+          id: timerData.id,
+          startedAt: timerData.started_at,
+          propertyName: prop?.name ?? "Unknown property",
+          propertyId: timerData.property_id,
+        });
+      }
+
       setLoading(false);
     }
     load();
@@ -114,7 +166,7 @@ export default function DashboardPage() {
     const mostRecentLog = recentActivity[0];
     if (mostRecentLog?.property) {
       const match = allProperties.find(
-        (p) => (p as Property & { name: string }).name === (mostRecentLog.property as { name: string }).name,
+        (p) => p.name === (mostRecentLog.property as { name: string }).name,
       );
       if (match) setRecentlyLoggedProperty(match);
     }
@@ -141,6 +193,128 @@ export default function DashboardPage() {
       { enableHighAccuracy: true, timeout: 5000 },
     );
   }, [allProperties, loading, recentActivity]);
+
+  useEffect(() => {
+    if (!activeTimer) return;
+    const start = new Date(activeTimer.startedAt).getTime();
+    const tick = () => setTimerElapsed(Math.floor((Date.now() - start) / 1000));
+    tick();
+    const id = setInterval(tick, 1000);
+    return () => clearInterval(id);
+  }, [activeTimer]);
+
+  async function handleMiniStart(propertyId: string) {
+    setMiniTimerStarting(true);
+    const supabase = createClient();
+    const { data: { user } } = await supabase.auth.getUser();
+    if (!user) { setMiniTimerStarting(false); return; }
+
+    const { data: newTimer, error } = await supabase
+      .from("active_timers")
+      .insert({
+        user_id: user.id,
+        property_id: propertyId,
+        title: "General Task",
+        category: "general_task",
+        source: "timer",
+      })
+      .select("id, started_at")
+      .single();
+
+    if (error) {
+      if (error.code === "23505") {
+        const { data: existing } = await supabase
+          .from("active_timers")
+          .select("id, property_id, started_at")
+          .eq("user_id", user.id)
+          .single();
+        if (existing) {
+          const prop = allProperties.find((p) => p.id === existing.property_id);
+          setActiveTimer({
+            id: existing.id,
+            startedAt: existing.started_at,
+            propertyName: prop?.name ?? "Unknown",
+            propertyId: existing.property_id,
+          });
+        }
+      }
+      setMiniTimerStarting(false);
+      return;
+    }
+
+    if (newTimer) {
+      const prop = allProperties.find((p) => p.id === propertyId);
+      setActiveTimer({
+        id: newTimer.id,
+        startedAt: newTimer.started_at,
+        propertyName: prop?.name ?? "Unknown",
+        propertyId: propertyId,
+      });
+    }
+    setMiniTimerStarting(false);
+  }
+
+  async function handleMiniStop() {
+    if (!activeTimer || miniTimerStopping) return;
+    setMiniTimerStopping(true);
+    const capturedElapsed = Math.floor((Date.now() - new Date(activeTimer.startedAt).getTime()) / 1000);
+    const capturedName = activeTimer.propertyName;
+
+    const supabase = createClient();
+    const { data: { user } } = await supabase.auth.getUser();
+    if (!user) { setMiniTimerStopping(false); return; }
+
+    const { data, error } = await supabase
+      .rpc("stop_timer", {
+        p_timer_id: activeTimer.id,
+        p_user_id: user.id,
+      })
+      .single() as { data: { id: string; duration_secs: number } | null; error: unknown };
+
+    if (data && !error) {
+      setPostSaveEntry({
+        id: data.id,
+        durationSecs: capturedElapsed > 0 ? capturedElapsed : data.duration_secs,
+        propertyName: capturedName,
+      });
+    }
+    setActiveTimer(null);
+    setTimerElapsed(0);
+    setMiniTimerStopping(false);
+  }
+
+  function handlePostSaveDone() {
+    setPostSaveEntry(null);
+    // Re-fetch recent activity
+    (async () => {
+      const supabase = createClient();
+      const { data: { user } } = await supabase.auth.getUser();
+      if (!user) return;
+      const { data: logs, count } = await supabase
+        .from("time_logs")
+        .select("id, title, category, started_at, duration_secs, property:properties(name)", { count: "exact" })
+        .eq("user_id", user.id)
+        .is("deleted_at", null)
+        .order("started_at", { ascending: false })
+        .limit(5);
+      setRecentActivity((logs as TimeLog[] | null) ?? []);
+      setEntriesLogged(count ?? 0);
+      const { data: sumData } = await supabase
+        .from("time_logs")
+        .select("duration_secs")
+        .eq("user_id", user.id)
+        .is("deleted_at", null);
+      const totalSecs = (sumData ?? []).reduce((sum, r) => sum + (r.duration_secs ?? 0), 0);
+      setTotalHours(totalSecs / 3600);
+    })();
+  }
+
+  function formatElapsed(secs: number) {
+    const h = String(Math.floor(secs / 3600)).padStart(2, "0");
+    const m = String(Math.floor((secs % 3600) / 60)).padStart(2, "0");
+    const s = String(secs % 60).padStart(2, "0");
+    return `${h}:${m}:${s}`;
+  }
 
   const now = new Date();
   const dayName = now.toLocaleDateString("en-US", { weekday: "long" });
@@ -172,6 +346,7 @@ export default function DashboardPage() {
   const hasProperties = properties.length > 0;
   const hasActivity = recentActivity.length > 0;
   const isNewUser = !hasProperties && !hasActivity;
+  const timerIsNearby = activeTimer && nearbyProperties.some((p) => p.id === activeTimer.propertyId);
 
   if (loading) {
     return (
@@ -201,6 +376,122 @@ export default function DashboardPage() {
           </span>
         </Link>
       </header>
+
+      {/* ── Post-Save Sheet (after stopping from dashboard) ────── */}
+      {postSaveEntry && (
+        <PostSaveSheet
+          timeLogId={postSaveEntry.id}
+          durationSecs={postSaveEntry.durationSecs}
+          propertyName={postSaveEntry.propertyName}
+          onDone={handlePostSaveDone}
+        />
+      )}
+
+      {/* ── Content below PostSaveSheet: dim when sheet is open ── */}
+      <div className={postSaveEntry ? "opacity-30 pointer-events-none select-none" : ""}>
+
+      {/* ── Nearby Mini Timer (above YTD) ──────────────────────── */}
+      {!isNewUser && hasProperties && geoChecked && nearbyProperties.length > 0 && !postSaveEntry && (
+        <section className="px-7 pt-5 pb-1">
+          {nearbyProperties.map((prop) => {
+            const isTimerForThis = activeTimer?.propertyId === prop.id;
+            return (
+              <div
+                key={prop.id}
+                className="rounded-xl bg-plum px-5 py-5 mb-4"
+              >
+                <p className="font-mono text-[10px] uppercase tracking-[1.5px] text-cream/60 font-medium">
+                  You are at
+                </p>
+                <div className="flex items-baseline justify-between gap-3 mt-1">
+                  <h2 className="font-serif text-[22px] text-cream font-medium leading-snug truncate">
+                    {prop.name}
+                  </h2>
+                  {isTimerForThis && (
+                    <span className="font-serif text-[24px] text-tangerine tabular-nums shrink-0">
+                      {formatElapsed(timerElapsed)}
+                    </span>
+                  )}
+                </div>
+
+                {isTimerForThis ? (
+                  <div className="flex items-center gap-4 mt-4">
+                    <button
+                      type="button"
+                      onClick={handleMiniStop}
+                      disabled={miniTimerStopping}
+                      className="inline-flex items-center gap-2 min-h-[44px] px-5 py-2 rounded-full bg-cream text-plum hover:bg-cream/90 transition-colors disabled:opacity-50"
+                    >
+                      <span className="w-3 h-3 bg-plum rounded-[2px]" />
+                      <span className="font-mono text-[10px] uppercase tracking-[1px] font-medium">
+                        {miniTimerStopping ? "Stopping…" : "Stop"}
+                      </span>
+                    </button>
+                    <Link
+                      href="/timer"
+                      className="font-mono text-[10px] uppercase tracking-[1px] text-cream/80 underline decoration-tangerine underline-offset-3 min-h-[44px] inline-flex items-center"
+                    >
+                      Add details &rarr;
+                    </Link>
+                  </div>
+                ) : (
+                  <div className="flex items-center gap-3 mt-4">
+                    {activeTimer ? (
+                      <span className="font-mono text-[10px] uppercase tracking-[1px] text-cream/60 min-h-[44px] inline-flex items-center">
+                        Timer running on {activeTimer.propertyName}
+                      </span>
+                    ) : (
+                      <>
+                        <button
+                          type="button"
+                          onClick={() => handleMiniStart(prop.id)}
+                          disabled={miniTimerStarting}
+                          className="inline-flex items-center gap-2 min-h-[44px] px-5 py-2 rounded-full bg-tangerine text-cream hover:bg-tangerine/90 transition-colors disabled:opacity-50"
+                        >
+                          <svg className="w-3 h-3" viewBox="0 0 16 16" fill="currentColor">
+                            <polygon points="3,1 14,8 3,15" />
+                          </svg>
+                          <span className="font-mono text-[10px] uppercase tracking-[1px] font-medium">
+                            {miniTimerStarting ? "Starting…" : "Start timer"}
+                          </span>
+                        </button>
+                        <Link
+                          href="/log"
+                          className="font-mono text-[10px] uppercase tracking-[1px] text-cream/80 underline decoration-tangerine underline-offset-3 min-h-[44px] px-2 inline-flex items-center"
+                        >
+                          Log hours
+                        </Link>
+                      </>
+                    )}
+                  </div>
+                )}
+              </div>
+            );
+          })}
+        </section>
+      )}
+
+      {/* ── Active Timer Banner (only when timer NOT for nearby) ── */}
+      {activeTimer && !timerIsNearby && !postSaveEntry && (
+        <Link
+          href="/timer"
+          className="mx-7 mt-5 mb-1 flex items-center gap-4 px-5 py-4 rounded-xl border border-tangerine/40 bg-tangerine/5 hover:bg-tangerine/10 transition-colors"
+        >
+          <span className="w-2 h-2 rounded-full bg-tangerine animate-pulse-dot shrink-0" />
+          <div className="flex-1 min-w-0">
+            <p className="font-mono text-[10px] uppercase tracking-[1.5px] text-tangerine font-medium">
+              Timer running
+            </p>
+            <p className="font-serif text-[15px] text-char truncate">
+              {activeTimer.propertyName} &middot;{" "}
+              <span className="tabular-nums">{formatElapsed(timerElapsed)}</span>
+            </p>
+          </div>
+          <span className="font-mono text-[10px] uppercase tracking-[1px] text-plum shrink-0">
+            Resume &rarr;
+          </span>
+        </Link>
+      )}
 
       {/* ── Welcome / Onboarding (new user) ─────────────────────── */}
       {isNewUser && (
@@ -325,135 +616,53 @@ export default function DashboardPage() {
         </section>
       )}
 
-      {/* ── Properties Section ──────────────────────────────────── */}
-      {!isNewUser && hasProperties && geoChecked && (
+      {/* ── Non-Nearby Property Section ────────────────────────── */}
+      {!isNewUser && hasProperties && geoChecked && nearbyProperties.length === 0 && (
         <section>
-          {nearbyProperties.length > 0 ? (
-            <>
-              <div className="px-7 py-4 border-b border-chalk">
-                <h2 className="font-serif text-[22px]">You are at</h2>
+          <div className="px-7 py-4 border-b border-chalk">
+            <h2 className="font-serif text-[22px]">Recently-logged property</h2>
+          </div>
+          {(() => {
+            const prop = recentlyLoggedProperty ?? allProperties[0];
+            if (!prop) return null;
+            return (
+              <div className="px-7 py-[22px] border-b border-chalk flex items-center justify-between">
+                <div className="flex items-center gap-3">
+                  <span
+                    className="w-3 h-3 rounded-full shrink-0"
+                    style={{ background: prop.color }}
+                  />
+                  <div className="flex flex-col gap-1">
+                    <Link
+                      href={`/reports?tab=activity&property=${prop.id}`}
+                      className="font-serif text-[19px] font-medium leading-snug hover:text-plum transition-colors"
+                    >
+                      {prop.name}
+                    </Link>
+                    {prop.address && (
+                      <span className="font-sans text-[12px] text-slate">
+                        {prop.address}
+                      </span>
+                    )}
+                    <div className="flex items-center gap-1 mt-1">
+                      <Link
+                        href={`/timer?property=${prop.id}`}
+                        className="font-mono text-[10px] uppercase tracking-[1px] text-plum underline decoration-tangerine underline-offset-3 min-h-[44px] px-2 inline-flex items-center"
+                      >
+                        Start timer
+                      </Link>
+                      <Link
+                        href="/log"
+                        className="font-mono text-[10px] uppercase tracking-[1px] text-plum underline decoration-tangerine underline-offset-3 min-h-[44px] px-2 inline-flex items-center"
+                      >
+                        Log hours
+                      </Link>
+                    </div>
+                  </div>
+                </div>
               </div>
-              {nearbyProperties.map((prop) => (
-                <div
-                  key={prop.id}
-                  className="px-7 py-[22px] border-b border-chalk flex items-center justify-between"
-                >
-                  <div className="flex items-center gap-3">
-                    <span
-                      className="w-3 h-3 rounded-full shrink-0"
-                      style={{ background: prop.color }}
-                    />
-                    <div className="flex flex-col gap-1">
-                      <Link
-                        href={`/reports?tab=activity&property=${prop.id}`}
-                        className="font-serif text-[19px] font-medium leading-snug hover:text-plum transition-colors"
-                      >
-                        {prop.name}
-                      </Link>
-                      {prop.address && (
-                        <span className="font-sans text-[12px] text-slate">
-                          {prop.address}
-                        </span>
-                      )}
-                      <div className="flex items-center gap-1 mt-1">
-                        <Link
-                          href={`/timer?property=${prop.id}`}
-                          className="font-mono text-[10px] uppercase tracking-[1px] text-plum underline decoration-tangerine underline-offset-3 min-h-[44px] px-2 inline-flex items-center"
-                        >
-                          Start timer
-                        </Link>
-                        <Link
-                          href="/log"
-                          className="font-mono text-[10px] uppercase tracking-[1px] text-plum underline decoration-tangerine underline-offset-3 min-h-[44px] px-2 inline-flex items-center"
-                        >
-                          Log hours
-                        </Link>
-                      </div>
-                    </div>
-                  </div>
-                </div>
-              ))}
-            </>
-          ) : (
-            <>
-              <div className="px-7 py-4 border-b border-chalk">
-                <h2 className="font-serif text-[22px]">Recently-logged property</h2>
-              </div>
-              {recentlyLoggedProperty ? (
-                <div className="px-7 py-[22px] border-b border-chalk flex items-center justify-between">
-                  <div className="flex items-center gap-3">
-                    <span
-                      className="w-3 h-3 rounded-full shrink-0"
-                      style={{ background: recentlyLoggedProperty.color }}
-                    />
-                    <div className="flex flex-col gap-1">
-                      <Link
-                        href={`/reports?tab=activity&property=${recentlyLoggedProperty.id}`}
-                        className="font-serif text-[19px] font-medium leading-snug hover:text-plum transition-colors"
-                      >
-                        {recentlyLoggedProperty.name}
-                      </Link>
-                      {recentlyLoggedProperty.address && (
-                        <span className="font-sans text-[12px] text-slate">
-                          {recentlyLoggedProperty.address}
-                        </span>
-                      )}
-                      <div className="flex items-center gap-1 mt-1">
-                        <Link
-                          href={`/timer?property=${recentlyLoggedProperty.id}`}
-                          className="font-mono text-[10px] uppercase tracking-[1px] text-plum underline decoration-tangerine underline-offset-3 min-h-[44px] px-2 inline-flex items-center"
-                        >
-                          Start timer
-                        </Link>
-                        <Link
-                          href="/log"
-                          className="font-mono text-[10px] uppercase tracking-[1px] text-plum underline decoration-tangerine underline-offset-3 min-h-[44px] px-2 inline-flex items-center"
-                        >
-                          Log hours
-                        </Link>
-                      </div>
-                    </div>
-                  </div>
-                </div>
-              ) : (
-                <div className="px-7 py-[22px] border-b border-chalk">
-                  <div className="flex items-center gap-3">
-                    <span
-                      className="w-3 h-3 rounded-full shrink-0"
-                      style={{ background: allProperties[0]?.color ?? "#ccc" }}
-                    />
-                    <div className="flex flex-col gap-1">
-                      <Link
-                        href={`/reports?tab=activity&property=${allProperties[0]?.id}`}
-                        className="font-serif text-[19px] font-medium leading-snug hover:text-plum transition-colors"
-                      >
-                        {allProperties[0]?.name ?? "—"}
-                      </Link>
-                      {allProperties[0]?.address && (
-                        <span className="font-sans text-[12px] text-slate">
-                          {allProperties[0].address}
-                        </span>
-                      )}
-                      <div className="flex items-center gap-1 mt-1">
-                        <Link
-                          href={`/timer?property=${allProperties[0]?.id}`}
-                          className="font-mono text-[10px] uppercase tracking-[1px] text-plum underline decoration-tangerine underline-offset-3 min-h-[44px] px-2 inline-flex items-center"
-                        >
-                          Start timer
-                        </Link>
-                        <Link
-                          href="/log"
-                          className="font-mono text-[10px] uppercase tracking-[1px] text-plum underline decoration-tangerine underline-offset-3 min-h-[44px] px-2 inline-flex items-center"
-                        >
-                          Log hours
-                        </Link>
-                      </div>
-                    </div>
-                  </div>
-                </div>
-              )}
-            </>
-          )}
+            );
+          })()}
         </section>
       )}
 
@@ -477,13 +686,21 @@ export default function DashboardPage() {
               <Link
                 key={entry.id}
                 href={`/activity/${entry.id}/edit`}
-                className="px-7 py-[18px] border-b border-chalk grid items-center gap-3 hover:bg-vellum transition-colors"
-                style={{ gridTemplateColumns: "56px 1fr auto" }}
+                className={`px-7 py-[18px] border-b border-chalk grid items-center gap-3 hover:bg-vellum transition-colors ${
+                  savedEntryId === entry.id ? "bg-plum-mist/50" : ""
+                }`}
+                style={{ gridTemplateColumns: "72px 1fr auto" }}
               >
                 <div className="flex flex-col">
-                  <span className="font-mono text-[12px] font-bold text-char leading-tight">
-                    {formatDayLabel(entry.started_at)}
-                  </span>
+                  {savedEntryId === entry.id ? (
+                    <span className="font-mono text-[11px] font-medium text-plum leading-tight">
+                      Just saved
+                    </span>
+                  ) : (
+                    <span className="font-mono text-[12px] font-bold text-char leading-tight">
+                      {formatDayLabel(entry.started_at)}
+                    </span>
+                  )}
                   <span className="font-mono text-[11px] text-slate leading-tight">
                     {formatTime(entry.started_at)}
                   </span>
@@ -497,7 +714,9 @@ export default function DashboardPage() {
                   </span>
                 </div>
                 <span className="font-serif text-[17px] text-plum tabular-nums">
-                  {(entry.duration_secs / 3600).toFixed(1)}h
+                  {entry.duration_secs < 5400
+                    ? `${Math.max(1, Math.ceil(entry.duration_secs / 60))}m`
+                    : `${(entry.duration_secs / 3600).toFixed(1)}h`}
                 </span>
               </Link>
             ))
@@ -513,6 +732,8 @@ export default function DashboardPage() {
           )}
         </section>
       )}
+
+      </div>{/* end dimmed wrapper */}
 
       {/* ── Dock ────────────────────────────────────────────────── */}
       <Dock />

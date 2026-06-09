@@ -35,6 +35,7 @@ export default function LogPage() {
   const [endTime, setEndTime] = useState("");
   const [selectedCategories, setSelectedCategories] = useState<string[]>([]);
   const [notes, setNotes] = useState("");
+  const [manualHours, setManualHours] = useState("");
   const [saving, setSaving] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [loading, setLoading] = useState(true);
@@ -67,7 +68,10 @@ export default function LogPage() {
     load();
   }, []);
 
-  const duration = calcDuration(startTime, endTime);
+  const timeDuration = calcDuration(startTime, endTime);
+  const manualVal = manualHours ? parseFloat(manualHours) : null;
+  const hasTimeRange = startTime !== "" && endTime !== "";
+  const duration = hasTimeRange ? timeDuration : manualVal;
 
   async function handleSubmit(e: React.FormEvent<HTMLFormElement>) {
     e.preventDefault();
@@ -77,12 +81,8 @@ export default function LogPage() {
       setError("Please select a property.");
       return;
     }
-    if (selectedCategories.length === 0) {
-      setError("Please select at least one category.");
-      return;
-    }
     if (!duration || duration <= 0) {
-      setError("Please enter a valid time range.");
+      setError(hasTimeRange ? "Please enter a valid time range." : "Please enter a duration.");
       return;
     }
 
@@ -96,10 +96,17 @@ export default function LogPage() {
       return;
     }
 
-    const startedAt = new Date(`${date}T${startTime}:00`).toISOString();
+    const startedAt = hasTimeRange
+      ? new Date(`${date}T${startTime}:00`).toISOString()
+      : new Date(`${date}T12:00:00`).toISOString();
     const durationSecs = Math.round(duration * 3600);
-    const title = selectedCategories.join(", ");
-    const categoryKey = selectedCategories.map((c) => c.toLowerCase().replace(/[/ ]+/g, "_")).join(",");
+    const endedAt = hasTimeRange
+      ? new Date(`${date}T${endTime}:00`).toISOString()
+      : new Date(new Date(`${date}T12:00:00`).getTime() + durationSecs * 1000).toISOString();
+    const title = selectedCategories.length > 0 ? selectedCategories.join(", ") : "General Task";
+    const categoryKey = selectedCategories.length > 0
+      ? selectedCategories.map((c) => c.toLowerCase().replace(/[/ ]+/g, "_")).join(",")
+      : "general_task";
 
     const { data: inserted, error: insertError } = await supabase
       .from("time_logs")
@@ -109,6 +116,7 @@ export default function LogPage() {
         title,
         category: categoryKey,
         started_at: startedAt,
+        ended_at: endedAt,
         duration_secs: durationSecs,
         description: notes.trim() || null,
       })
@@ -205,43 +213,85 @@ export default function LogPage() {
           />
         </div>
 
-        {/* Time worked */}
+        {/* Duration */}
         <div>
           <label className="font-mono text-[10px] tracking-[1.5px] uppercase text-quill font-medium mb-2 block">
-            Time worked
+            Duration <span className="text-tangerine">*</span>
+          </label>
+          <div className="border border-plum rounded-md p-5 bg-cream">
+            <div className="flex items-baseline gap-2">
+              <input
+                type="number"
+                inputMode="decimal"
+                step="0.25"
+                min="0"
+                placeholder="0"
+                value={hasTimeRange ? (duration ? (duration < 1.5 ? Math.max(1, Math.ceil(duration * 60)).toString() : duration.toFixed(1)) : "") : manualHours}
+                onChange={(e) => {
+                  if (!hasTimeRange) setManualHours(e.target.value);
+                }}
+                readOnly={hasTimeRange}
+                className={`font-serif text-[32px] text-plum tabular-nums leading-none bg-transparent focus:outline-none w-24 ${hasTimeRange ? "opacity-70" : ""}`}
+              />
+              <span className="font-serif text-[16px] italic text-quill">
+                {hasTimeRange
+                  ? (duration && duration < 1.5 ? "min" : "hrs")
+                  : "hrs"}
+              </span>
+            </div>
+            {hasTimeRange && (
+              <p className="font-sans text-[11px] text-slate mt-1">Calculated from time range below</p>
+            )}
+          </div>
+        </div>
+
+        {/* Time range (optional) */}
+        <div>
+          <label className="font-mono text-[10px] tracking-[1.5px] uppercase text-quill font-medium mb-2 block">
+            Time range <span className="text-slate font-normal">(optional)</span>
           </label>
           <div className="grid grid-cols-[1fr_auto_1fr] items-center gap-3">
-            <input
-              type="time"
-              value={startTime}
-              onChange={(e) => setStartTime(e.target.value)}
-              className="w-full min-h-12 px-4 py-3.5 border border-chalk rounded-md text-[15px] text-char bg-cream focus:outline-none focus:border-plum focus:shadow-[0_0_0_4px] focus:shadow-plum-mist"
-            />
-            <span className="text-slate text-[15px]">&rarr;</span>
-            <input
-              type="time"
-              value={endTime}
-              onChange={(e) => setEndTime(e.target.value)}
-              className="w-full min-h-12 px-4 py-3.5 border border-chalk rounded-md text-[15px] text-char bg-cream focus:outline-none focus:border-plum focus:shadow-[0_0_0_4px] focus:shadow-plum-mist"
-            />
+            <div>
+              <input
+                type="time"
+                value={startTime}
+                onChange={(e) => {
+                  setStartTime(e.target.value);
+                  if (e.target.value) setManualHours("");
+                }}
+                className="w-full min-h-12 px-4 py-3.5 border border-chalk rounded-md text-[15px] text-char bg-cream focus:outline-none focus:border-plum focus:shadow-[0_0_0_4px] focus:shadow-plum-mist"
+              />
+              <p className="mt-1 font-sans text-[11px] text-slate">hh:mm AM</p>
+            </div>
+            <span className="text-slate text-[15px] -mt-5">&rarr;</span>
+            <div>
+              <input
+                type="time"
+                value={endTime}
+                onChange={(e) => {
+                  setEndTime(e.target.value);
+                  if (e.target.value) setManualHours("");
+                }}
+                className="w-full min-h-12 px-4 py-3.5 border border-chalk rounded-md text-[15px] text-char bg-cream focus:outline-none focus:border-plum focus:shadow-[0_0_0_4px] focus:shadow-plum-mist"
+              />
+              <p className="mt-1 font-sans text-[11px] text-slate">hh:mm PM</p>
+            </div>
           </div>
-
-          {/* Duration callout */}
-          <div className="mt-3 border border-plum rounded-md p-5 bg-cream flex justify-between items-baseline">
-            <span className="font-mono text-[10px] tracking-[1.5px] uppercase text-quill font-medium">
-              Duration
-            </span>
-            <span className="font-serif text-[32px] text-plum tabular-nums leading-none">
-              {duration ? duration.toFixed(1) : "—"}{" "}
-              <span className="text-[16px] italic text-quill">hrs</span>
-            </span>
-          </div>
+          {hasTimeRange && (
+            <button
+              type="button"
+              onClick={() => { setStartTime(""); setEndTime(""); }}
+              className="mt-2 font-mono text-[10px] uppercase tracking-[1px] text-slate underline underline-offset-2"
+            >
+              Clear times
+            </button>
+          )}
         </div>
 
         {/* Category */}
         <div>
           <label className="font-mono text-[10px] tracking-[1.5px] uppercase text-quill font-medium mb-2 block">
-            What did you do? <span className="text-tangerine">*</span>
+            What did you do?
           </label>
           <TaskTypePicker
             selected={selectedCategories}
