@@ -242,40 +242,6 @@ export function generateTaxPdf(opts: PdfOptions) {
     y = (doc as unknown as { lastAutoTable: { finalY: number } }).lastAutoTable.finalY + 25;
   }
 
-  // ── Hours by Task Type ─────────────────────────────────
-  if (opts.categoryBreakdown.length > 0) {
-    checkPage(80);
-    doc.setFont("helvetica", "bold");
-    doc.setFontSize(14);
-    doc.setTextColor(...PLUM);
-    doc.text("Hours by Task Type", margin, y);
-    y += 18;
-
-    const catRows = opts.categoryBreakdown.map((c) => [
-      c.name,
-      `${c.hours.toFixed(1)}`,
-      `${c.pct.toFixed(0)}%`,
-    ]);
-
-    autoTable(doc, {
-      startY: y,
-      margin: { left: margin, right: margin },
-      head: [["Task Type", "Hours", "% of Total"]],
-      body: catRows,
-      theme: "grid",
-      styles: { fontSize: 9.5, cellPadding: 7, textColor: CHAR, lineColor: [...BONE], lineWidth: 0.5 },
-      headStyles: { fillColor: [...PLUM], textColor: [255, 255, 255], fontStyle: "bold" },
-      alternateRowStyles: { fillColor: [...CREAM] },
-      columnStyles: {
-        0: { cellWidth: 300 },
-        1: { halign: "right" },
-        2: { halign: "right" },
-      },
-    });
-
-    y = (doc as unknown as { lastAutoTable: { finalY: number } }).lastAutoTable.finalY + 25;
-  }
-
   // ── Detailed Activity Log ───────────────────────────────
   checkPage(60);
   doc.setFont("helvetica", "bold");
@@ -291,7 +257,7 @@ export function generateTaxPdf(opts: PdfOptions) {
       ].sort((a, b) => new Date(b.started_at).getTime() - new Date(a.started_at).getTime())
     : opts.activity.map((e) => ({ ...e, loggedBy: "" }));
 
-  const logHead = ["Date", "Time", "Property", "Task Type", "Hours"];
+  const logHead = ["Date", "Time", "Property", "Task & Details", "Hours"];
   if (opts.showCombined && opts.spouseName) logHead.push("Logged By");
 
   const logRows = allEntries.map((e) => {
