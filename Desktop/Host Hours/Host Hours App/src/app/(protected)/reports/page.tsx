@@ -7,6 +7,7 @@ import { TopStrip } from "@/components/top-strip";
 import { Dock } from "@/components/dock";
 import { PropertyFilter } from "@/components/property-filter";
 import { createClient } from "@/lib/supabase/client";
+import { generateTaxPdf } from "@/lib/generate-tax-pdf";
 
 type Property = { id: string; name: string; tags: string[] };
 
@@ -650,17 +651,46 @@ function ReportsContent() {
                 )}
 
                 {/* Export */}
-                <div className="px-7 py-7">
+                <div className="px-7 py-7 flex flex-col gap-3">
+                  <button
+                    type="button"
+                    onClick={() =>
+                      generateTaxPdf({
+                        userName,
+                        spouseName: showCombined ? spouseName : null,
+                        showCombined,
+                        taxYear: 2026,
+                        goalHours,
+                        targetTest,
+                        totalHours: filteredHours,
+                        spouseHours,
+                        propertyBreakdown,
+                        categoryBreakdown,
+                        activity: filteredActivity,
+                        spouseActivity,
+                        propertyFilter: activeProp,
+                      })
+                    }
+                    className="w-full min-h-12 bg-plum text-cream font-mono text-[11px] uppercase tracking-[1.5px] font-medium rounded-md hover:bg-plum-deep active:scale-[0.98] transition-all flex items-center justify-center gap-2"
+                  >
+                    <svg className="w-4 h-4" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+                      <path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z" />
+                      <polyline points="14 2 14 8 20 8" />
+                      <line x1="12" y1="18" x2="12" y2="12" />
+                      <polyline points="9 15 12 18 15 15" />
+                    </svg>
+                    Download Tax Report PDF
+                  </button>
                   <button
                     type="button"
                     onClick={emailReportCsv}
                     disabled={emailing}
-                    className="w-full min-h-12 bg-plum text-cream font-mono text-[11px] uppercase tracking-[1.5px] font-medium rounded-md hover:bg-plum-deep active:scale-[0.98] transition-all disabled:opacity-50"
+                    className="w-full min-h-12 bg-cream text-quill border border-chalk font-mono text-[11px] uppercase tracking-[1.5px] font-medium rounded-md hover:border-stone active:scale-[0.98] transition-all disabled:opacity-50"
                   >
                     {emailing ? "Sending…" : "Email Report CSV"}
                   </button>
                   {emailSent && (
-                    <p className="font-sans text-[12px] text-success text-center mt-3">
+                    <p className="font-sans text-[12px] text-success text-center">
                       Report sent to your email.
                     </p>
                   )}
