@@ -26,6 +26,7 @@ type CategoryBreakdown = {
 };
 
 type PdfOptions = {
+  fullName: string;
   userName: string;
   spouseName: string | null;
   showCombined: boolean;
@@ -39,10 +40,10 @@ type PdfOptions = {
   activity: ActivityEntry[];
   spouseActivity: ActivityEntry[];
   propertyFilter: string;
+  teamMemberCount: number;
 };
 
 const PLUM = [58, 27, 73] as const;
-const TANGERINE = [227, 108, 46] as const;
 const CHAR = [45, 42, 40] as const;
 const SLATE = [120, 113, 108] as const;
 const CREAM = [249, 246, 240] as const;
@@ -87,35 +88,35 @@ export function generateTaxPdf(opts: PdfOptions) {
 
   // ── Header ──────────────────────────────────────────────
   doc.setFillColor(...PLUM);
-  doc.rect(0, 0, pageW, 100, "F");
+  doc.rect(0, 0, pageW, 90, "F");
 
   doc.setFont("helvetica", "bold");
   doc.setFontSize(22);
   doc.setTextColor(255, 255, 255);
-  doc.text("Host Hours", margin, 42);
+  doc.text("Hours Tracking Report", margin, 40);
 
   doc.setFont("helvetica", "normal");
   doc.setFontSize(11);
   doc.setTextColor(255, 255, 255, 180);
-  doc.text("Short-Term Rental Activity Report", margin, 62);
+  doc.text("Short-Term Rental Activity", margin, 58);
 
-  doc.setFontSize(13);
+  doc.setFontSize(18);
   doc.setTextColor(255, 255, 255);
-  doc.text(`Tax Year ${opts.taxYear}`, pageW - margin, 42, { align: "right" });
+  doc.text(`${opts.taxYear}`, pageW - margin, 40, { align: "right" });
 
-  doc.setFontSize(10);
+  doc.setFontSize(11);
   doc.setTextColor(255, 255, 255, 180);
-  const preparedFor = opts.showCombined && opts.spouseName
-    ? `${opts.userName} & ${opts.spouseName}`
-    : opts.userName;
-  doc.text(`Prepared for ${preparedFor}`, pageW - margin, 62, { align: "right" });
+  const displayName = opts.showCombined && opts.spouseName
+    ? `${opts.fullName} & ${opts.spouseName}`
+    : opts.fullName;
+  doc.text(displayName, pageW - margin, 58, { align: "right" });
 
   if (opts.propertyFilter !== "All properties") {
     doc.setFontSize(9);
-    doc.text(`Property: ${opts.propertyFilter}`, pageW - margin, 78, { align: "right" });
+    doc.text(`Property: ${opts.propertyFilter}`, pageW - margin, 74, { align: "right" });
   }
 
-  y = 125;
+  y = 115;
 
   // ── Summary Section ─────────────────────────────────────
   doc.setFont("helvetica", "bold");
@@ -126,28 +127,44 @@ export function generateTaxPdf(opts: PdfOptions) {
 
   const irsHours = opts.showCombined ? opts.totalHours + opts.spouseHours : opts.totalHours;
   const targetHours = opts.targetTest === "substantially" ? null : parseInt(opts.targetTest, 10);
+  const totalEntries = opts.activity.length + (opts.showCombined ? opts.spouseActivity.length : 0);
 
   const summaryRows: string[][] = [
     ["Total Hours Logged", `${irsHours.toFixed(1)} hours`],
-    ["Annual Goal", `${opts.goalHours} hours`],
-    ["Goal Status", irsHours >= opts.goalHours ? "Goal Reached" : `${Math.ceil(opts.goalHours - irsHours)} hours remaining`],
-    ["Properties Tracked", `${opts.propertyBreakdown.length}`],
-    ["Total Entries", `${opts.activity.length + (opts.showCombined ? opts.spouseActivity.length : 0)}`],
   ];
 
   if (opts.showCombined && opts.spouseName) {
-    summaryRows.splice(1, 0,
+    summaryRows.push(
       [`${opts.userName}'s Hours`, `${opts.totalHours.toFixed(1)} hours`],
       [`${opts.spouseName}'s Hours`, `${opts.spouseHours.toFixed(1)} hours`],
     );
   }
 
-  if (targetHours) {
-    summaryRows.push(["Material Participation Target", `${targetHours} hours`]);
-    summaryRows.push(["Target Status", irsHours >= targetHours ? "Met" : `${Math.ceil(targetHours - irsHours)} hours remaining`]);
-  } else {
-    summaryRows.push(["Material Participation Target", "Substantially All"]);
+  summaryRows.push(
+    ["Properties Tracked", `${opts.propertyBreakdown.length}`],
+    ["Total Time Entries", `${totalEntries}`],
+  );
+
+  if (targetHours === 500) {
+    summaryRows.push(
+      ["Material Participation Test", "500-Hour Test"],
+      ["Target", "500 hours"],
+      ["Status", irsHours >= 500 ? "Met" : `${Math.ceil(500 - irsHours)} hours remaining`],
+    );
+  } else if (targetHours === 100) {
+    summaryRows.push(
+      ["Material Participation Test", "100-Hour / Significant Participation Test"],
+      ["Target", "100 hours"],
+      ["Status", irsHours >= 100 ? "Met" : `${Math.ceil(100 - irsHours)} hours remaining`],
+    );
+    if (opts.teamMemberCount > 0) {
+      summaryRows.push(
+        ["Team Members", `${opts.teamMemberCount}`],
+        ["Note", "Participation must not be less than any other individual's participation"],
+      );
+    }
   }
+  // For "substantially" — no goal/status rows needed
 
   autoTable(doc, {
     startY: y,
@@ -155,7 +172,7 @@ export function generateTaxPdf(opts: PdfOptions) {
     theme: "plain",
     styles: { fontSize: 10, cellPadding: 6, textColor: CHAR },
     columnStyles: {
-      0: { fontStyle: "bold", cellWidth: 200 },
+      0: { fontStyle: "bold", cellWidth: 220 },
       1: { halign: "right" },
     },
     body: summaryRows,
@@ -163,66 +180,6 @@ export function generateTaxPdf(opts: PdfOptions) {
   });
 
   y = (doc as unknown as { lastAutoTable: { finalY: number } }).lastAutoTable.finalY + 25;
-
-  // ── IRS Material Participation ──────────────────────────
-  checkPage(140);
-  doc.setFont("helvetica", "bold");
-  doc.setFontSize(14);
-  doc.setTextColor(...PLUM);
-  doc.text("IRS Material Participation", margin, y);
-  y += 8;
-
-  doc.setFont("helvetica", "normal");
-  doc.setFontSize(8);
-  doc.setTextColor(...SLATE);
-  doc.text("Per IRS regulations, taxpayers must demonstrate material participation in rental activities to deduct losses against other income.", margin, y + 10, { maxWidth: contentW });
-  y += 28;
-
-  const tests: { name: string; description: string; result: string; met: boolean }[] = [];
-
-  if (targetHours) {
-    tests.push({
-      name: `${targetHours}-Hour Test`,
-      description: `The taxpayer participated in the activity for more than ${targetHours} hours during the tax year.`,
-      result: irsHours >= targetHours
-        ? `${irsHours.toFixed(1)} hours logged — requirement met.`
-        : `${irsHours.toFixed(1)} of ${targetHours} hours logged — ${Math.ceil(targetHours - irsHours)} hours remaining.`,
-      met: irsHours >= targetHours,
-    });
-  }
-
-  tests.push({
-    name: "Record-Keeping",
-    description: "Contemporaneous records of time, activity type, and property are maintained.",
-    result: `${opts.activity.length + (opts.showCombined ? opts.spouseActivity.length : 0)} detailed entries logged across ${opts.propertyBreakdown.length} properties.`,
-    met: true,
-  });
-
-  for (const test of tests) {
-    checkPage(60);
-    doc.setFillColor(test.met ? 234 : 254, test.met ? 248 : 243, test.met ? 237 : 234);
-    doc.roundedRect(margin, y, contentW, 50, 4, 4, "F");
-
-    doc.setFont("helvetica", "bold");
-    doc.setFontSize(10);
-    doc.setTextColor(...CHAR);
-    doc.text(test.name, margin + 12, y + 16);
-
-    const statusText = test.met ? "MET" : "IN PROGRESS";
-    const statusColor = test.met ? [21, 128, 61] : [...TANGERINE];
-    doc.setFontSize(8);
-    doc.setTextColor(statusColor[0], statusColor[1], statusColor[2]);
-    doc.text(statusText, pageW - margin - 12, y + 16, { align: "right" });
-
-    doc.setFont("helvetica", "normal");
-    doc.setFontSize(8.5);
-    doc.setTextColor(...SLATE);
-    doc.text(test.result, margin + 12, y + 34, { maxWidth: contentW - 24 });
-
-    y += 60;
-  }
-
-  y += 15;
 
   // ── Hours by Property ───────────────────────────────────
   if (opts.propertyBreakdown.length > 0) {
@@ -284,13 +241,13 @@ export function generateTaxPdf(opts: PdfOptions) {
     y = (doc as unknown as { lastAutoTable: { finalY: number } }).lastAutoTable.finalY + 25;
   }
 
-  // ── Hours by Category ───────────────────────────────────
+  // ── Hours by Task Type ─────────────────────────────────
   if (opts.categoryBreakdown.length > 0) {
     checkPage(80);
     doc.setFont("helvetica", "bold");
     doc.setFontSize(14);
     doc.setTextColor(...PLUM);
-    doc.text("Hours by Category", margin, y);
+    doc.text("Hours by Task Type", margin, y);
     y += 18;
 
     const catRows = opts.categoryBreakdown.map((c) => [
@@ -302,7 +259,7 @@ export function generateTaxPdf(opts: PdfOptions) {
     autoTable(doc, {
       startY: y,
       margin: { left: margin, right: margin },
-      head: [["Category", "Hours", "% of Total"]],
+      head: [["Task Type", "Hours", "% of Total"]],
       body: catRows,
       theme: "grid",
       styles: { fontSize: 9.5, cellPadding: 7, textColor: CHAR, lineColor: [...BONE], lineWidth: 0.5 },
@@ -333,7 +290,7 @@ export function generateTaxPdf(opts: PdfOptions) {
       ].sort((a, b) => new Date(b.started_at).getTime() - new Date(a.started_at).getTime())
     : opts.activity.map((e) => ({ ...e, loggedBy: "" }));
 
-  const logHead = ["Date", "Time", "Property", "Category", "Hours"];
+  const logHead = ["Date", "Time", "Property", "Task Type", "Hours"];
   if (opts.showCombined && opts.spouseName) logHead.push("Logged By");
 
   const logRows = allEntries.map((e) => {
@@ -380,6 +337,6 @@ export function generateTaxPdf(opts: PdfOptions) {
   addPageFooter();
 
   // ── Save ────────────────────────────────────────────────
-  const filename = `Host_Hours_Tax_Report_${opts.taxYear}${opts.propertyFilter !== "All properties" ? "_" + opts.propertyFilter.replace(/[^a-zA-Z0-9]/g, "_") : ""}.pdf`;
+  const filename = `Hours_Tracking_Report_${opts.taxYear}${opts.propertyFilter !== "All properties" ? "_" + opts.propertyFilter.replace(/[^a-zA-Z0-9]/g, "_") : ""}.pdf`;
   doc.save(filename);
 }

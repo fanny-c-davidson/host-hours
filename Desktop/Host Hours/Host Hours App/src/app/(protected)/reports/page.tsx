@@ -52,6 +52,8 @@ function ReportsContent() {
   const [activeTag, setActiveTag] = useState<string | null>(null);
   const [goalHours, setGoalHours] = useState(500);
   const [userName, setUserName] = useState("");
+  const [fullName, setFullName] = useState("");
+  const [teamMemberCount, setTeamMemberCount] = useState(0);
   const [spouseLinked, setSpouseLinked] = useState(false);
   const [spouseName, setSpouseName] = useState<string | null>(null);
   const [spouseHours, setSpouseHours] = useState(0);
@@ -72,10 +74,18 @@ function ReportsContent() {
           .select("full_name, goal_hours, target_test")
           .eq("id", user.id)
           .single();
-        const fullName = profile?.full_name || user.user_metadata?.full_name || "";
-        setUserName(fullName.split(" ")[0]);
+        const loadedFullName = profile?.full_name || user.user_metadata?.full_name || "";
+        setFullName(loadedFullName);
+        setUserName(loadedFullName.split(" ")[0]);
         if (profile?.goal_hours) setGoalHours(profile.goal_hours);
         if (profile?.target_test) setTargetTest(profile.target_test);
+
+        const { count: teamCount } = await supabase
+          .from("team_members")
+          .select("id", { count: "exact", head: true })
+          .eq("owner_id", user.id)
+          .eq("status", "active");
+        setTeamMemberCount(teamCount ?? 0);
 
         // Check for active spouse link
         const { data: sentLink } = await supabase
@@ -753,6 +763,7 @@ function ReportsContent() {
                         .sort((a, b) => b.hours - a.hours);
 
                       generateTaxPdf({
+                        fullName,
                         userName,
                         spouseName: showCombined ? spouseName : null,
                         showCombined,
@@ -766,6 +777,7 @@ function ReportsContent() {
                         activity: yearActivity,
                         spouseActivity: yearSpouseActivity,
                         propertyFilter: activeProp,
+                        teamMemberCount,
                       });
                     }}
                     className="w-full min-h-12 bg-plum text-cream font-mono text-[11px] uppercase tracking-[1.5px] font-medium rounded-md hover:bg-plum-deep active:scale-[0.98] transition-all flex items-center justify-center gap-2"
