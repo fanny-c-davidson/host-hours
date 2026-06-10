@@ -97,7 +97,7 @@ export function generateTaxPdf(opts: PdfOptions) {
 
   doc.setFont("helvetica", "normal");
   doc.setFontSize(11);
-  doc.setTextColor(255, 255, 255, 180);
+  doc.setTextColor(200, 180, 210);
   doc.text("Short-Term Rental Activity", margin, 58);
 
   doc.setFontSize(18);
@@ -105,7 +105,7 @@ export function generateTaxPdf(opts: PdfOptions) {
   doc.text(`${opts.taxYear}`, pageW - margin, 40, { align: "right" });
 
   doc.setFontSize(11);
-  doc.setTextColor(255, 255, 255, 180);
+  doc.setTextColor(200, 180, 210);
   const displayName = opts.showCombined && opts.spouseName
     ? `${opts.fullName} & ${opts.spouseName}`
     : opts.fullName;
@@ -113,6 +113,7 @@ export function generateTaxPdf(opts: PdfOptions) {
 
   if (opts.propertyFilter !== "All properties") {
     doc.setFontSize(9);
+    doc.setTextColor(200, 180, 210);
     doc.text(`Property: ${opts.propertyFilter}`, pageW - margin, 74, { align: "right" });
   }
 
