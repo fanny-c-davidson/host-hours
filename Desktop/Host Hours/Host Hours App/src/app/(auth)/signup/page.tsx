@@ -2,11 +2,19 @@
 
 import Link from "next/link";
 import { TopStrip } from "@/components/top-strip";
-import { useState } from "react";
+import { Suspense, useState } from "react";
 import { useRouter, useSearchParams } from "next/navigation";
 import { createClient } from "@/lib/supabase/client";
 
 export default function SignupPage() {
+  return (
+    <Suspense>
+      <SignupInner />
+    </Suspense>
+  );
+}
+
+function SignupInner() {
   const router = useRouter();
   const searchParams = useSearchParams();
   const next = searchParams.get("next");

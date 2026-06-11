@@ -1,7 +1,7 @@
 "use client";
 
 import Link from "next/link";
-import { useEffect, useState } from "react";
+import { Suspense, useEffect, useState } from "react";
 import { useSearchParams, useRouter } from "next/navigation";
 import { createClient } from "@/lib/supabase/client";
 import { acceptInvitation } from "@/lib/actions/team";
@@ -9,6 +9,14 @@ import { acceptInvitation } from "@/lib/actions/team";
 type State = "loading" | "unauthenticated" | "accepting" | "success" | "error";
 
 export default function InvitePage() {
+  return (
+    <Suspense>
+      <InviteInner />
+    </Suspense>
+  );
+}
+
+function InviteInner() {
   const searchParams = useSearchParams();
   const router = useRouter();
   const token = searchParams.get("token");
