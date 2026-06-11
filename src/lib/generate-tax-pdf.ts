@@ -43,11 +43,11 @@ type PdfOptions = {
   teamMemberCount: number;
 };
 
-const PLUM = [58, 27, 73] as const;
-const CHAR = [45, 42, 40] as const;
-const SLATE = [120, 113, 108] as const;
-const CREAM = [249, 246, 240] as const;
-const BONE = [232, 228, 222] as const;
+const PLUM: [number, number, number] = [58, 27, 73];
+const CHAR: [number, number, number] = [45, 42, 40];
+const SLATE: [number, number, number] = [120, 113, 108];
+const CREAM: [number, number, number] = [249, 246, 240];
+const BONE: [number, number, number] = [232, 228, 222];
 
 export function generateTaxPdf(opts: PdfOptions) {
   const doc = new jsPDF({ orientation: "portrait", unit: "pt", format: "letter" });
