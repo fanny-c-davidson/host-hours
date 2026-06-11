@@ -14,31 +14,31 @@ type PropertyBreakdown = {
   name: string;
   hours: number;
   mine: number;
-  spouse: number;
+  cohost: number;
 };
 
 type CategoryBreakdown = {
   name: string;
   hours: number;
   mine: number;
-  spouse: number;
+  cohost: number;
   pct: number;
 };
 
 type PdfOptions = {
   fullName: string;
   userName: string;
-  spouseName: string | null;
+  cohostName: string | null;
   showCombined: boolean;
   taxYear: number;
   goalHours: number;
   targetTest: string;
   totalHours: number;
-  spouseHours: number;
+  cohostHours: number;
   propertyBreakdown: PropertyBreakdown[];
   categoryBreakdown: CategoryBreakdown[];
   activity: ActivityEntry[];
-  spouseActivity: ActivityEntry[];
+  cohostActivity: ActivityEntry[];
   propertyFilter: string;
   teamMemberCount: number;
 };
@@ -106,8 +106,8 @@ export function generateTaxPdf(opts: PdfOptions) {
 
   doc.setFontSize(11);
   doc.setTextColor(200, 180, 210);
-  const displayName = opts.showCombined && opts.spouseName
-    ? `${opts.fullName} & ${opts.spouseName}`
+  const displayName = opts.showCombined && opts.cohostName
+    ? `${opts.fullName} & ${opts.cohostName}`
     : opts.fullName;
   doc.text(displayName, pageW - margin, 58, { align: "right" });
 
@@ -126,18 +126,18 @@ export function generateTaxPdf(opts: PdfOptions) {
   doc.text("Summary", margin, y);
   y += 20;
 
-  const irsHours = opts.showCombined ? opts.totalHours + opts.spouseHours : opts.totalHours;
+  const irsHours = opts.showCombined ? opts.totalHours + opts.cohostHours : opts.totalHours;
   const targetHours = opts.targetTest === "substantially" ? null : parseInt(opts.targetTest, 10);
-  const totalEntries = opts.activity.length + (opts.showCombined ? opts.spouseActivity.length : 0);
+  const totalEntries = opts.activity.length + (opts.showCombined ? opts.cohostActivity.length : 0);
 
   const summaryRows: string[][] = [
     ["Total Hours Logged", `${irsHours.toFixed(1)} hours`],
   ];
 
-  if (opts.showCombined && opts.spouseName) {
+  if (opts.showCombined && opts.cohostName) {
     summaryRows.push(
       [`${opts.userName}'s Hours`, `${opts.totalHours.toFixed(1)} hours`],
-      [`${opts.spouseName}'s Hours`, `${opts.spouseHours.toFixed(1)} hours`],
+      [`${opts.cohostName}'s Hours`, `${opts.cohostHours.toFixed(1)} hours`],
     );
   }
 
@@ -193,26 +193,26 @@ export function generateTaxPdf(opts: PdfOptions) {
 
     const propRows = opts.propertyBreakdown.map((p) => {
       const row = [p.name, `${p.hours.toFixed(1)}`];
-      if (opts.showCombined && opts.spouseName) {
+      if (opts.showCombined && opts.cohostName) {
         row.push(`${p.mine.toFixed(1)}`);
-        row.push(`${p.spouse.toFixed(1)}`);
+        row.push(`${p.cohost.toFixed(1)}`);
       }
       return row;
     });
 
     const propHead = ["Property", "Total Hours"];
-    if (opts.showCombined && opts.spouseName) {
+    if (opts.showCombined && opts.cohostName) {
       propHead.push(opts.userName);
-      propHead.push(opts.spouseName);
+      propHead.push(opts.cohostName);
     }
 
     const propTotalRow = [
       "Total",
       `${opts.propertyBreakdown.reduce((s, p) => s + p.hours, 0).toFixed(1)}`,
     ];
-    if (opts.showCombined && opts.spouseName) {
+    if (opts.showCombined && opts.cohostName) {
       propTotalRow.push(`${opts.propertyBreakdown.reduce((s, p) => s + p.mine, 0).toFixed(1)}`);
-      propTotalRow.push(`${opts.propertyBreakdown.reduce((s, p) => s + p.spouse, 0).toFixed(1)}`);
+      propTotalRow.push(`${opts.propertyBreakdown.reduce((s, p) => s + p.cohost, 0).toFixed(1)}`);
     }
     propRows.push(propTotalRow);
 
@@ -250,15 +250,15 @@ export function generateTaxPdf(opts: PdfOptions) {
   doc.text("Detailed Activity Log", margin, y);
   y += 18;
 
-  const allEntries = opts.showCombined && opts.spouseName
+  const allEntries = opts.showCombined && opts.cohostName
     ? [
         ...opts.activity.map((e) => ({ ...e, loggedBy: opts.userName })),
-        ...opts.spouseActivity.map((e) => ({ ...e, loggedBy: opts.spouseName! })),
+        ...opts.cohostActivity.map((e) => ({ ...e, loggedBy: opts.cohostName! })),
       ].sort((a, b) => new Date(b.started_at).getTime() - new Date(a.started_at).getTime())
     : opts.activity.map((e) => ({ ...e, loggedBy: "" }));
 
   const logHead = ["Date", "Time", "Property", "Task & Details", "Hours"];
-  if (opts.showCombined && opts.spouseName) logHead.push("Logged By");
+  if (opts.showCombined && opts.cohostName) logHead.push("Logged By");
 
   const logRows = allEntries.map((e) => {
     const d = new Date(e.started_at);
@@ -269,7 +269,7 @@ export function generateTaxPdf(opts: PdfOptions) {
       e.title || e.category || "—",
       (e.duration_secs / 3600).toFixed(2),
     ];
-    if (opts.showCombined && opts.spouseName) row.push(e.loggedBy);
+    if (opts.showCombined && opts.cohostName) row.push(e.loggedBy);
     return row;
   });
 

@@ -12,7 +12,7 @@ export function PropertyFilter({
   activeProp,
   onTagChange,
   onPropChange,
-  spouseName,
+  cohostName,
   showCombined,
   onToggleCombined,
 }: {
@@ -22,7 +22,7 @@ export function PropertyFilter({
   activeProp: string;
   onTagChange: (tag: string | null) => void;
   onPropChange: (prop: string) => void;
-  spouseName?: string | null;
+  cohostName?: string | null;
   showCombined?: boolean;
   onToggleCombined?: () => void;
 }) {
@@ -95,7 +95,7 @@ export function PropertyFilter({
       )}
 
       {/* Spouse toggle */}
-      {spouseName && onToggleCombined && (
+      {cohostName && onToggleCombined && (
         <div className="px-7 flex gap-2 items-center">
           <span className="shrink-0 font-mono text-[9px] uppercase tracking-[1.5px] text-slate font-medium mr-1">
             Spouse
@@ -107,7 +107,7 @@ export function PropertyFilter({
               showCombined ? PILL_ACTIVE : PILL_INACTIVE
             }`}
           >
-            Add {spouseName}&rsquo;s hours
+            Add {cohostName}&rsquo;s hours
           </button>
         </div>
       )}

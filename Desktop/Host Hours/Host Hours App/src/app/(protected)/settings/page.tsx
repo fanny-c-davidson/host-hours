@@ -5,6 +5,7 @@ import { useEffect, useState } from "react";
 import { useRouter } from "next/navigation";
 import { Dock } from "@/components/dock";
 import { createClient } from "@/lib/supabase/client";
+import { ROLE_LABELS, type TeamRole } from "@/lib/permissions";
 
 function Toggle({ defaultOn = false }: { defaultOn?: boolean }) {
   return (
@@ -104,8 +105,13 @@ export default function SettingsPage() {
   const [taxYear, setTaxYear] = useState(2026);
   const [targetTest, setTargetTest] = useState("500");
   const [goalHours, setGoalHours] = useState(500);
-  const [spouseName, setSpouseName] = useState<string | null>(null);
-  const [spouseStatus, setSpouseStatus] = useState<string | null>(null);
+  const [teamCount, setTeamCount] = useState(0);
+  const [cohostName, setCohostName] = useState<string | null>(null);
+  const [isTeamMember, setIsTeamMember] = useState(false);
+  const [teamOwnerName, setTeamOwnerName] = useState<string | null>(null);
+  const [teamOwnerEmail, setTeamOwnerEmail] = useState<string | null>(null);
+  const [teamRole, setTeamRole] = useState<string | null>(null);
+  const [teamMembers, setTeamMembers] = useState<Array<{ id: string; role: string; status: string; email: string; fullName: string | null }>>([]);
   const [loading, setLoading] = useState(true);
 
   useEffect(() => {
@@ -149,30 +155,55 @@ export default function SettingsPage() {
 
       setPropertyCount(count ?? 0);
 
-      const { data: spouseLink } = await supabase
-        .from("spouse_links")
-        .select("status, requester_id, partner_id, partner_email")
-        .or(`requester_id.eq.${user.id},partner_id.eq.${user.id}`)
+      const { data: teamData } = await supabase
+        .from("team_members")
+        .select("id, role, status, email, member_id")
+        .eq("owner_id", user.id);
+
+      const activeTeam = (teamData ?? []).filter((t) => t.status === "active" || t.status === "pending");
+      setTeamCount(activeTeam.length);
+
+      const memberIds = activeTeam.filter((t) => t.member_id).map((t) => t.member_id!);
+      let profileMap: Record<string, string> = {};
+      if (memberIds.length > 0) {
+        const { data: profiles } = await supabase
+          .from("profiles")
+          .select("id, full_name")
+          .in("id", memberIds);
+        profileMap = (profiles ?? []).reduce((acc, p) => ({ ...acc, [p.id]: p.full_name }), {} as Record<string, string>);
+      }
+
+      setTeamMembers(activeTeam.map((t) => ({
+        id: t.id,
+        role: t.role,
+        status: t.status,
+        email: t.email,
+        fullName: t.member_id ? profileMap[t.member_id] ?? null : null,
+      })));
+
+      const cohost = activeTeam.find((t) => t.role === "spouse" && t.status === "active");
+      if (cohost?.member_id) {
+        setCohostName(profileMap[cohost.member_id] ?? null);
+      }
+
+      const { data: membership } = await supabase
+        .from("team_members")
+        .select("owner_id, role")
+        .eq("member_id", user.id)
+        .eq("status", "active")
         .limit(1)
         .maybeSingle();
 
-      if (spouseLink) {
-        setSpouseStatus(spouseLink.status);
-        if (spouseLink.status === "active") {
-          const partnerId = spouseLink.requester_id === user.id
-            ? spouseLink.partner_id
-            : spouseLink.requester_id;
-          if (partnerId) {
-            const { data: partnerProfile } = await supabase
-              .from("profiles")
-              .select("full_name")
-              .eq("id", partnerId)
-              .single();
-            setSpouseName(partnerProfile?.full_name || spouseLink.partner_email);
-          }
-        } else {
-          setSpouseName(spouseLink.partner_email);
-        }
+      if (membership) {
+        setIsTeamMember(true);
+        setTeamRole(membership.role);
+        const { data: ownerProfile } = await supabase
+          .from("profiles")
+          .select("full_name, email")
+          .eq("id", membership.owner_id)
+          .single();
+        setTeamOwnerName(ownerProfile?.full_name ?? null);
+        setTeamOwnerEmail(ownerProfile?.email ?? null);
       }
 
       setLoading(false);
@@ -246,63 +277,67 @@ export default function SettingsPage() {
           </span>
         </div>
 
-        {/* Plan & billing */}
-        <SectionBar>Plan &amp; billing</SectionBar>
+        {/* Plan & billing (owner only) */}
+        {!isTeamMember && (
+          <>
+            <SectionBar>Plan &amp; billing</SectionBar>
 
-        {/* Current plan */}
-        <div className="mx-7 mt-4 p-6 border-[1.5px] border-plum rounded-md relative bg-cream">
-          <span className="absolute -top-2.5 left-5 bg-plum text-cream font-mono text-[9px] tracking-[1.5px] uppercase px-2.5 py-1 rounded-[999px] font-medium">
-            Current
-          </span>
-          <div className="flex justify-between items-baseline mb-1">
-            <div className="font-serif text-2xl font-medium text-plum tracking-[-0.5px]">
-              {plan.name}
-            </div>
-            <div className="font-serif text-[22px] font-medium text-char tracking-[-0.5px] tabular-nums">
-              {plan.price}
-              <span className="font-sans text-xs text-slate font-normal">
-                {tierId === "free" ? " forever" : "/mo"}
+            {/* Current plan */}
+            <div className="mx-7 mt-4 p-6 border-[1.5px] border-plum rounded-md relative bg-cream">
+              <span className="absolute -top-2.5 left-5 bg-plum text-cream font-mono text-[9px] tracking-[1.5px] uppercase px-2.5 py-1 rounded-[999px] font-medium">
+                Current
               </span>
+              <div className="flex justify-between items-baseline mb-1">
+                <div className="font-serif text-2xl font-medium text-plum tracking-[-0.5px]">
+                  {plan.name}
+                </div>
+                <div className="font-serif text-[22px] font-medium text-char tracking-[-0.5px] tabular-nums">
+                  {plan.price}
+                  <span className="font-sans text-xs text-slate font-normal">
+                    {tierId === "free" ? " forever" : "/mo"}
+                  </span>
+                </div>
+              </div>
+              <div className="font-serif italic text-[13px] text-quill mb-4">
+                {plan.tagline}
+              </div>
+              <ul className="mb-4">
+                {plan.features.map((f) => (
+                  <li
+                    key={f}
+                    className="text-[13px] text-quill py-1.5 pl-[18px] relative leading-relaxed"
+                  >
+                    <span className="absolute left-1 top-2 text-tangerine font-bold text-base leading-none">
+                      ·
+                    </span>
+                    {f}
+                  </li>
+                ))}
+              </ul>
+              {maxProps && (
+                <div className="font-mono text-[11px] tracking-[0.5px] text-success mb-1.5">
+                  <strong className="font-medium tabular-nums">{propertyCount} of {maxProps}</strong> properties in use
+                </div>
+              )}
+              {periodEnd && (
+                <div className="font-mono text-[10px] tracking-[1px] text-slate uppercase">
+                  Renews {new Date(periodEnd).toLocaleDateString("en-US", { month: "short", day: "numeric", year: "numeric" })}
+                </div>
+              )}
             </div>
-          </div>
-          <div className="font-serif italic text-[13px] text-quill mb-4">
-            {plan.tagline}
-          </div>
-          <ul className="mb-4">
-            {plan.features.map((f) => (
-              <li
-                key={f}
-                className="text-[13px] text-quill py-1.5 pl-[18px] relative leading-relaxed"
-              >
-                <span className="absolute left-1 top-2 text-tangerine font-bold text-base leading-none">
-                  ·
-                </span>
-                {f}
-              </li>
-            ))}
-          </ul>
-          {maxProps && (
-            <div className="font-mono text-[11px] tracking-[0.5px] text-success mb-1.5">
-              <strong className="font-medium tabular-nums">{propertyCount} of {maxProps}</strong> properties in use
-            </div>
-          )}
-          {periodEnd && (
-            <div className="font-mono text-[10px] tracking-[1px] text-slate uppercase">
-              Renews {new Date(periodEnd).toLocaleDateString("en-US", { month: "short", day: "numeric", year: "numeric" })}
-            </div>
-          )}
-        </div>
 
-        {/* Show upgrade options for non-enterprise users */}
-        {tierId !== "enterprise" && (
-          <div className="mx-7 mt-4 mb-6">
-            <Link
-              href="/settings/billing/plan"
-              className="block w-full min-h-12 px-5.5 py-3.5 rounded-md text-[15px] font-medium bg-plum text-cream hover:bg-plum-deep transition-colors text-center"
-            >
-              Change plan →
-            </Link>
-          </div>
+            {/* Show upgrade options for non-enterprise users */}
+            {tierId !== "enterprise" && (
+              <div className="mx-7 mt-4 mb-6">
+                <Link
+                  href="/settings/billing/plan"
+                  className="block w-full min-h-12 px-5.5 py-3.5 rounded-md text-[15px] font-medium bg-plum text-cream hover:bg-plum-deep transition-colors text-center"
+                >
+                  Change plan →
+                </Link>
+              </div>
+            )}
+          </>
         )}
 
         {/* Account */}
@@ -313,14 +348,50 @@ export default function SettingsPage() {
         <Link href="/settings/password">
           <SettingRow label="Change password" arrow />
         </Link>
-        <Link href="/settings/billing">
-          <SettingRow label="Subscription & billing" sub={`${plan.name} plan`} arrow />
-        </Link>
+        {!isTeamMember && (
+          <Link href="/settings/billing">
+            <SettingRow label="Subscription & billing" sub={`${plan.name} plan`} arrow />
+          </Link>
+        )}
 
-        {/* Tax & tracking */}
-        <SectionBar>Tax &amp; tracking</SectionBar>
+        {/* Team */}
+        <SectionBar>Team</SectionBar>
+        {isTeamMember && teamMembers.length === 0 ? (
+          <Link href="/settings/team">
+            <SettingRow
+              label={teamRole ? ROLE_LABELS[teamRole as TeamRole] : "Team member"}
+              sub={teamOwnerName ? `${teamOwnerName}${teamOwnerEmail ? ` (${teamOwnerEmail})` : ""}` : "Team owner"}
+              arrow
+            />
+          </Link>
+        ) : (
+          <>
+            <Link href="/settings/team">
+              <SettingRow
+                label="Owner"
+                sub={`${fullName} (${email})`}
+                arrow
+              />
+            </Link>
+            {teamMembers.map((member) => (
+              <Link key={member.id} href="/settings/team">
+                <SettingRow
+                  label={`${ROLE_LABELS[member.role as TeamRole] || member.role}${member.status === "pending" ? " (pending)" : ""}`}
+                  sub={member.fullName ? `${member.fullName} (${member.email})` : member.email}
+                  arrow
+                />
+              </Link>
+            ))}
+            <Link href="/settings/team">
+              <SettingRow label="Invite team member" sub="Add spouse or helpers" arrow />
+            </Link>
+          </>
+        )}
 
-        <div className="mx-7 mt-4 p-6 border-[1.5px] border-chalk rounded-md bg-cream">
+        {/* Target & Goal */}
+        <SectionBar>Target &amp; Goal</SectionBar>
+
+        <div className="mx-7 mt-4 mb-6 p-6 border-[1.5px] border-chalk rounded-md bg-cream">
           <div className="grid grid-cols-3 gap-4 mb-5">
             <div>
               <div className="font-mono text-[9px] tracking-[1.5px] uppercase text-slate mb-1">
@@ -347,31 +418,6 @@ export default function SettingsPage() {
                 {targetTest === "substantially" ? "Subst. all" : `${targetTest} hrs`}
               </div>
             </div>
-          </div>
-
-          <div className="border-t border-chalk pt-4 mb-5">
-            <div className="font-mono text-[9px] tracking-[1.5px] uppercase text-slate mb-1.5">
-              Spouse account
-            </div>
-            {spouseStatus === "active" && spouseName ? (
-              <div className="flex items-center gap-2">
-                <span className="w-2 h-2 rounded-full bg-success shrink-0" />
-                <span className="font-serif text-[15px] font-medium text-char tracking-[-0.2px]">
-                  Linked with {spouseName.split(" ")[0]}
-                </span>
-              </div>
-            ) : spouseStatus === "pending" ? (
-              <div className="flex items-center gap-2">
-                <span className="w-2 h-2 rounded-full bg-tangerine shrink-0" />
-                <span className="font-serif text-[15px] text-quill">
-                  Invite pending · {spouseName}
-                </span>
-              </div>
-            ) : (
-              <span className="font-serif text-[15px] text-slate italic">
-                Not linked
-              </span>
-            )}
           </div>
 
           <Link

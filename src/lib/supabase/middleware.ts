@@ -5,7 +5,7 @@ import type { Database } from '@/types/database';
 // Public routes that do not require authentication.
 // Everything else is treated as protected by default.
 const PUBLIC_ROUTES = ['/', '/login', '/signup', '/reset-password'];
-const PUBLIC_PREFIXES = ['/auth']; // covers /auth/callback, /auth/confirm, etc.
+const PUBLIC_PREFIXES = ['/auth', '/invite'];
 
 function isPublicRoute(pathname: string): boolean {
   if (PUBLIC_ROUTES.includes(pathname)) return true;
@@ -76,11 +76,11 @@ export async function updateSession(request: NextRequest) {
   }
 
   // Redirect authenticated users away from auth pages to avoid showing login
-  // when already signed in.
+  // when already signed in. Respect the `next` param if present.
   if (user && (pathname === '/login' || pathname === '/signup')) {
-    const dashboardUrl = request.nextUrl.clone();
-    dashboardUrl.pathname = '/dashboard';
-    return NextResponse.redirect(dashboardUrl);
+    const next = searchParams.get('next');
+    const target = next?.startsWith('/') ? next : '/dashboard';
+    return NextResponse.redirect(new URL(target, request.url));
   }
 
   // Return the supabaseResponse so cookies are forwarded correctly.

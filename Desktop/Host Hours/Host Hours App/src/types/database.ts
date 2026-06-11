@@ -393,6 +393,21 @@ export type Database = {
           status?: 'pending' | 'active';
         };
       };
+      role_permissions: {
+        Row: {
+          id: string;
+          role: 'spouse' | 'manager' | 'employee';
+          permission: string;
+          created_at: string;
+        };
+        Insert: {
+          id?: string;
+          role: 'spouse' | 'manager' | 'employee';
+          permission: string;
+          created_at?: string;
+        };
+        Update: never;
+      };
       webhook_events: {
         Row: {
           id: string;
@@ -427,6 +442,22 @@ export type Database = {
         Args: { p_timer_id: string; p_user_id: string };
         Returns: Database['public']['Tables']['time_logs']['Row'];
       };
+      is_team_member_of: {
+        Args: { p_owner_id: string };
+        Returns: boolean;
+      };
+      get_team_role: {
+        Args: { p_owner_id: string };
+        Returns: 'spouse' | 'manager' | 'employee' | null;
+      };
+      has_team_permission: {
+        Args: { p_owner_id: string; p_permission: string };
+        Returns: boolean;
+      };
+      is_assigned_to_property: {
+        Args: { p_property_id: string };
+        Returns: boolean;
+      };
     };
     Enums: {
       subscription_status:
@@ -446,7 +477,7 @@ export type Database = {
         | 'inspection'
         | 'staging'
         | 'other';
-      team_role: 'manager' | 'employee';
+      team_role: 'spouse' | 'manager' | 'employee';
       team_member_status: 'pending' | 'active' | 'suspended';
     };
   };

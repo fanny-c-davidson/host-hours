@@ -11,6 +11,7 @@ export type Subscription = Database['public']['Tables']['subscriptions']['Row'];
 export type TeamMember  = Database['public']['Tables']['team_members']['Row'];
 export type PropertyAssignment = Database['public']['Tables']['property_assignments']['Row'];
 export type Invitation  = Database['public']['Tables']['invitations']['Row'];
+export type RolePermission = Database['public']['Tables']['role_permissions']['Row'];
 
 // ── Composed types ─────────────────────────────────────────────────────────
 

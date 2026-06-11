@@ -3,20 +3,23 @@
 import Link from "next/link";
 import { TopStrip } from "@/components/top-strip";
 import { useState } from "react";
-import { useRouter } from "next/navigation";
+import { useRouter, useSearchParams } from "next/navigation";
 import { createClient } from "@/lib/supabase/client";
 
 export default function LoginPage() {
   const router = useRouter();
+  const searchParams = useSearchParams();
+  const next = searchParams.get("next");
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
 
   async function handleGoogleSignIn() {
     const supabase = createClient();
+    const callbackUrl = `${window.location.origin}/auth/callback${next ? `?next=${encodeURIComponent(next)}` : ""}`;
     await supabase.auth.signInWithOAuth({
       provider: "google",
       options: {
-        redirectTo: `${window.location.origin}/auth/callback`,
+        redirectTo: callbackUrl,
       },
     });
   }
@@ -42,7 +45,7 @@ export default function LoginPage() {
       return;
     }
 
-    router.push("/dashboard");
+    router.push(next?.startsWith("/") ? next : "/dashboard");
   }
 
   return (

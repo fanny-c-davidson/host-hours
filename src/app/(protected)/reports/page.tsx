@@ -54,10 +54,10 @@ function ReportsContent() {
   const [userName, setUserName] = useState("");
   const [fullName, setFullName] = useState("");
   const [teamMemberCount, setTeamMemberCount] = useState(0);
-  const [spouseLinked, setSpouseLinked] = useState(false);
-  const [spouseName, setSpouseName] = useState<string | null>(null);
-  const [spouseHours, setSpouseHours] = useState(0);
-  const [spouseActivity, setSpouseActivity] = useState<TimeLog[]>([]);
+  const [cohostLinked, setCohostLinked] = useState(false);
+  const [cohostName, setCohostName] = useState<string | null>(null);
+  const [cohostHours, setCohostHours] = useState(0);
+  const [cohostActivity, setCohostActivity] = useState<TimeLog[]>([]);
   const [showCombined, setShowCombined] = useState(false);
   const [targetTest, setTargetTest] = useState("500");
   const [pdfYear, setPdfYear] = useState(new Date().getFullYear());
@@ -87,44 +87,36 @@ function ReportsContent() {
           .eq("status", "active");
         setTeamMemberCount(teamCount ?? 0);
 
-        // Check for active spouse link
-        const { data: sentLink } = await supabase
-          .from("spouse_links")
-          .select("partner_id, partner_email")
-          .eq("requester_id", user.id)
+        // Check for active spouse on the user's team
+        const { data: cohostMember } = await supabase
+          .from("team_members")
+          .select("member_id, email")
+          .eq("owner_id", user.id)
+          .eq("role", "spouse")
           .eq("status", "active")
           .limit(1)
           .maybeSingle();
 
-        const { data: receivedLink } = sentLink ? { data: null } : await supabase
-          .from("spouse_links")
-          .select("requester_id")
-          .eq("partner_id", user.id)
-          .eq("status", "active")
-          .limit(1)
-          .maybeSingle();
-
-        const spouseId = sentLink?.partner_id ?? receivedLink?.requester_id ?? null;
-        if (spouseId) {
-          setSpouseLinked(true);
-          const { data: spouseProfile } = await supabase
+        if (cohostMember?.member_id) {
+          setCohostLinked(true);
+          const { data: cohostProfile } = await supabase
             .from("profiles")
             .select("full_name")
-            .eq("id", spouseId)
+            .eq("id", cohostMember.member_id)
             .single();
-          const fullName = spouseProfile?.full_name;
-          setSpouseName(fullName ? fullName.split(" ")[0] : sentLink?.partner_email ?? null);
+          const name = cohostProfile?.full_name;
+          setCohostName(name ? name.split(" ")[0] : cohostMember.email);
 
-          const { data: spouseLogs } = await supabase
+          const { data: cohostLogs } = await supabase
             .from("time_logs")
             .select("id, title, category, started_at, duration_secs, description, property:properties(name, address)")
-            .eq("user_id", spouseId)
+            .eq("user_id", cohostMember.member_id)
             .is("deleted_at", null)
             .order("started_at", { ascending: false });
-          const spouseEntries = (spouseLogs as TimeLog[] | null) ?? [];
-          setSpouseActivity(spouseEntries);
-          const sTotal = spouseEntries.reduce((s, r) => s + (r.duration_secs ?? 0), 0);
-          setSpouseHours(sTotal / 3600);
+          const cohostEntries = (cohostLogs as TimeLog[] | null) ?? [];
+          setCohostActivity(cohostEntries);
+          const cTotal = cohostEntries.reduce((s, r) => s + (r.duration_secs ?? 0), 0);
+          setCohostHours(cTotal / 3600);
         }
 
       const [{ data: props }, { data: logs }] = await Promise.all([
@@ -175,67 +167,67 @@ function ReportsContent() {
 
   const filteredHours = filteredActivity.reduce((sum, e) => sum + (e.duration_secs ?? 0), 0) / 3600;
 
-  // Category breakdown — include spouse activity when combined
+  // Category breakdown — include cohost activity when combined
   const combinedActivity = showCombined
-    ? [...filteredActivity, ...spouseActivity]
+    ? [...filteredActivity, ...cohostActivity]
     : filteredActivity;
-  const combinedHours = showCombined ? filteredHours + spouseHours : filteredHours;
+  const combinedHours = showCombined ? filteredHours + cohostHours : filteredHours;
 
-  const catMap = new Map<string, { total: number; mine: number; spouse: number }>();
+  const catMap = new Map<string, { total: number; mine: number; cohost: number }>();
   for (const entry of filteredActivity) {
     const name = entry.title || entry.category;
-    const prev = catMap.get(name) ?? { total: 0, mine: 0, spouse: 0 };
+    const prev = catMap.get(name) ?? { total: 0, mine: 0, cohost: 0 };
     const h = (entry.duration_secs ?? 0) / 3600;
-    catMap.set(name, { total: prev.total + h, mine: prev.mine + h, spouse: prev.spouse });
+    catMap.set(name, { total: prev.total + h, mine: prev.mine + h, cohost: prev.cohost });
   }
   if (showCombined) {
-    for (const entry of spouseActivity) {
+    for (const entry of cohostActivity) {
       const name = entry.title || entry.category;
-      const prev = catMap.get(name) ?? { total: 0, mine: 0, spouse: 0 };
+      const prev = catMap.get(name) ?? { total: 0, mine: 0, cohost: 0 };
       const h = (entry.duration_secs ?? 0) / 3600;
-      catMap.set(name, { total: prev.total + h, mine: prev.mine, spouse: prev.spouse + h });
+      catMap.set(name, { total: prev.total + h, mine: prev.mine, cohost: prev.cohost + h });
     }
   }
   const categoryBreakdown = Array.from(catMap.entries())
-    .map(([name, { total, mine, spouse }]) => ({
+    .map(([name, { total, mine, cohost }]) => ({
       name,
       hours: total,
       mine,
-      spouse,
+      cohost,
       pct: combinedHours > 0 ? (total / combinedHours) * 100 : 0,
     }))
     .sort((a, b) => b.hours - a.hours);
 
   // Property breakdown
-  const propMap = new Map<string, { total: number; mine: number; spouse: number; address: string | null }>();
+  const propMap = new Map<string, { total: number; mine: number; cohost: number; address: string | null }>();
   for (const entry of filteredActivity) {
     const key = showCombined
       ? (entry.property?.address || entry.property?.name || "Unknown")
       : (entry.property?.name || "Unknown");
-    const prev = propMap.get(key) ?? { total: 0, mine: 0, spouse: 0, address: entry.property?.address ?? null };
+    const prev = propMap.get(key) ?? { total: 0, mine: 0, cohost: 0, address: entry.property?.address ?? null };
     const h = (entry.duration_secs ?? 0) / 3600;
-    propMap.set(key, { total: prev.total + h, mine: prev.mine + h, spouse: prev.spouse, address: prev.address || entry.property?.address || null });
+    propMap.set(key, { total: prev.total + h, mine: prev.mine + h, cohost: prev.cohost, address: prev.address || entry.property?.address || null });
   }
   if (showCombined) {
-    for (const entry of spouseActivity) {
+    for (const entry of cohostActivity) {
       const key = entry.property?.address || entry.property?.name || "Unknown";
-      const prev = propMap.get(key) ?? { total: 0, mine: 0, spouse: 0, address: entry.property?.address ?? null };
+      const prev = propMap.get(key) ?? { total: 0, mine: 0, cohost: 0, address: entry.property?.address ?? null };
       const h = (entry.duration_secs ?? 0) / 3600;
-      propMap.set(key, { total: prev.total + h, mine: prev.mine, spouse: prev.spouse + h, address: prev.address || entry.property?.address || null });
+      propMap.set(key, { total: prev.total + h, mine: prev.mine, cohost: prev.cohost + h, address: prev.address || entry.property?.address || null });
     }
   }
   const propertyBreakdown = Array.from(propMap.entries())
-    .map(([name, { total, mine, spouse }]) => ({
+    .map(([name, { total, mine, cohost }]) => ({
       name,
       hours: total,
       mine,
-      spouse,
+      cohost,
       pct: combinedHours > 0 ? (total / combinedHours) * 100 : 0,
     }))
     .sort((a, b) => b.hours - a.hours);
 
-  // IRS tests — use combined hours when spouse toggle is on
-  const irsHours = showCombined ? filteredHours + spouseHours : filteredHours;
+  // IRS tests — use combined hours when cohost toggle is on
+  const irsHours = showCombined ? filteredHours + cohostHours : filteredHours;
   const goalPct = goalHours > 0 ? Math.min((irsHours / goalHours) * 100, 100) : 0;
   const hoursRemaining = Math.max(goalHours - irsHours, 0);
 
@@ -324,8 +316,8 @@ function ReportsContent() {
       return;
     }
 
-    const includingSpouse = showCombined && spouseActivity.length > 0;
-    const headers = includingSpouse
+    const includingCohost = showCombined && cohostActivity.length > 0;
+    const headers = includingCohost
       ? ["Date", "Start Time", "Hours", "Category", "Property", "Logged by", "Notes"]
       : ["Date", "Start Time", "Hours", "Category", "Property", "Notes"];
 
@@ -337,22 +329,22 @@ function ReportsContent() {
       const category = entry.title || "";
       const property = entry.property?.name || "";
       const notes = entry.description || "";
-      const fields = includingSpouse
+      const fields = includingCohost
         ? [date, time, hours, category, property, loggedBy || "", notes]
         : [date, time, hours, category, property, notes];
       return fields.map(escapeCsvField).join(",");
     }
 
-    const allEntries = includingSpouse
+    const allEntries = includingCohost
       ? [
           ...filteredActivity.map((e) => ({ entry: e, by: userName })),
-          ...spouseActivity.map((e) => ({ entry: e, by: spouseName || "Spouse" })),
+          ...cohostActivity.map((e) => ({ entry: e, by: cohostName || "Spouse" })),
         ].sort((a, b) => new Date(b.entry.started_at).getTime() - new Date(a.entry.started_at).getTime())
       : filteredActivity.map((e) => ({ entry: e, by: "" }));
 
     const rows = allEntries.map(({ entry, by }) => entryToRow(entry, by));
-    const exportTotal = includingSpouse ? filteredHours + spouseHours : filteredHours;
-    const totalRow = includingSpouse
+    const exportTotal = includingCohost ? filteredHours + cohostHours : filteredHours;
+    const totalRow = includingCohost
       ? ["", "", exportTotal.toFixed(2), "TOTAL", "", "", ""].join(",")
       : ["", "", exportTotal.toFixed(2), "TOTAL", "", ""].join(",");
     const csv = [headers.join(","), ...rows, "", totalRow].join("\n");
@@ -524,9 +516,10 @@ function ReportsContent() {
                     setActiveProp("All properties");
                   }}
                   onPropChange={setActiveProp}
-                  spouseName={spouseLinked ? spouseName : null}
+                  cohostName={cohostLinked ? cohostName : null}
                   showCombined={showCombined}
-                  onToggleCombined={spouseLinked ? () => setShowCombined(!showCombined) : undefined}
+                  onToggleCombined={cohostLinked ? () => setShowCombined(!showCombined) : undefined}
+
                 />
 
                 {/* Hero stat */}
@@ -536,7 +529,7 @@ function ReportsContent() {
                   </p>
                   <div className="mt-2 flex items-baseline gap-2">
                     <span className="font-serif text-[88px] text-plum tabular-nums tracking-[-5px] leading-none">
-                      {(showCombined ? filteredHours + spouseHours : filteredHours).toFixed(1)}
+                      {(showCombined ? filteredHours + cohostHours : filteredHours).toFixed(1)}
                     </span>
                     <span className="font-serif text-[26px] italic text-quill">hours</span>
                   </div>
@@ -548,8 +541,8 @@ function ReportsContent() {
                         <span className="text-char font-medium tabular-nums">{filteredHours.toFixed(1)}h</span>
                       </div>
                       <div className="flex justify-between text-[13px]">
-                        <span className="text-quill">{spouseName ?? "Spouse"}</span>
-                        <span className="text-char font-medium tabular-nums">{spouseHours.toFixed(1)}h</span>
+                        <span className="text-quill">{cohostName || "Spouse"}</span>
+                        <span className="text-char font-medium tabular-nums">{cohostHours.toFixed(1)}h</span>
                       </div>
                     </div>
                   )}
@@ -603,10 +596,10 @@ function ReportsContent() {
                               style={{ width: `${cat.pct}%` }}
                             />
                           </div>
-                          {showCombined && (cat.mine > 0 || cat.spouse > 0) && (
+                          {showCombined && (cat.mine > 0 || cat.cohost > 0) && (
                             <div className="flex gap-3 text-[11px] text-slate">
                               {cat.mine > 0 && <span>{userName} {cat.mine.toFixed(1)}h</span>}
-                              {cat.spouse > 0 && <span>{spouseName} {cat.spouse.toFixed(1)}h</span>}
+                              {cat.cohost > 0 && <span>{cohostName} {cat.cohost.toFixed(1)}h</span>}
                             </div>
                           )}
                         </div>
@@ -643,10 +636,10 @@ function ReportsContent() {
                               style={{ width: `${prop.pct}%` }}
                             />
                           </div>
-                          {showCombined && (prop.mine > 0 || prop.spouse > 0) && (
+                          {showCombined && (prop.mine > 0 || prop.cohost > 0) && (
                             <div className="flex gap-3 text-[11px] text-slate">
                               {prop.mine > 0 && <span>{userName} {prop.mine.toFixed(1)}h</span>}
-                              {prop.spouse > 0 && <span>{spouseName} {prop.spouse.toFixed(1)}h</span>}
+                              {prop.cohost > 0 && <span>{cohostName} {prop.cohost.toFixed(1)}h</span>}
                             </div>
                           )}
                         </div>
@@ -672,7 +665,7 @@ function ReportsContent() {
                     const allYears = Array.from(
                       new Set([
                         ...allActivity.map((e) => new Date(e.started_at).getFullYear()),
-                        ...(showCombined ? spouseActivity.map((e) => new Date(e.started_at).getFullYear()) : []),
+                        ...(showCombined ? cohostActivity.map((e) => new Date(e.started_at).getFullYear()) : []),
                       ]),
                     ).sort((a, b) => b - a);
                     if (allYears.length === 0) allYears.push(new Date().getFullYear());
@@ -708,56 +701,56 @@ function ReportsContent() {
                       const yearActivity = filteredActivity.filter(
                         (e) => new Date(e.started_at).getFullYear() === pdfYear,
                       );
-                      const yearSpouseActivity = spouseActivity.filter(
+                      const yearCohostActivity = cohostActivity.filter(
                         (e) => new Date(e.started_at).getFullYear() === pdfYear,
                       );
 
                       const yearHours = yearActivity.reduce((s, e) => s + (e.duration_secs ?? 0), 0) / 3600;
-                      const yearSpouseHours = yearSpouseActivity.reduce((s, e) => s + (e.duration_secs ?? 0), 0) / 3600;
+                      const yearCohostHours = yearCohostActivity.reduce((s, e) => s + (e.duration_secs ?? 0), 0) / 3600;
 
-                      const yearPropMap = new Map<string, { total: number; mine: number; spouse: number }>();
+                      const yearPropMap = new Map<string, { total: number; mine: number; cohost: number }>();
                       for (const entry of yearActivity) {
                         const key = showCombined
                           ? (entry.property?.address || entry.property?.name || "Unknown")
                           : (entry.property?.name || "Unknown");
-                        const prev = yearPropMap.get(key) ?? { total: 0, mine: 0, spouse: 0 };
+                        const prev = yearPropMap.get(key) ?? { total: 0, mine: 0, cohost: 0 };
                         const h = (entry.duration_secs ?? 0) / 3600;
-                        yearPropMap.set(key, { total: prev.total + h, mine: prev.mine + h, spouse: prev.spouse });
+                        yearPropMap.set(key, { total: prev.total + h, mine: prev.mine + h, cohost: prev.cohost });
                       }
                       if (showCombined) {
-                        for (const entry of yearSpouseActivity) {
+                        for (const entry of yearCohostActivity) {
                           const key = entry.property?.address || entry.property?.name || "Unknown";
-                          const prev = yearPropMap.get(key) ?? { total: 0, mine: 0, spouse: 0 };
+                          const prev = yearPropMap.get(key) ?? { total: 0, mine: 0, cohost: 0 };
                           const h = (entry.duration_secs ?? 0) / 3600;
-                          yearPropMap.set(key, { total: prev.total + h, mine: prev.mine, spouse: prev.spouse + h });
+                          yearPropMap.set(key, { total: prev.total + h, mine: prev.mine, cohost: prev.cohost + h });
                         }
                       }
-                      const yearCombinedHours = showCombined ? yearHours + yearSpouseHours : yearHours;
+                      const yearCombinedHours = showCombined ? yearHours + yearCohostHours : yearHours;
                       const yearPropBreakdown = Array.from(yearPropMap.entries())
-                        .map(([name, { total, mine, spouse }]) => ({
-                          name, hours: total, mine, spouse,
+                        .map(([name, { total, mine, cohost }]) => ({
+                          name, hours: total, mine, cohost,
                           pct: yearCombinedHours > 0 ? (total / yearCombinedHours) * 100 : 0,
                         }))
                         .sort((a, b) => b.hours - a.hours);
 
-                      const yearCatMap = new Map<string, { total: number; mine: number; spouse: number }>();
+                      const yearCatMap = new Map<string, { total: number; mine: number; cohost: number }>();
                       for (const entry of yearActivity) {
                         const name = entry.title || entry.category;
-                        const prev = yearCatMap.get(name) ?? { total: 0, mine: 0, spouse: 0 };
+                        const prev = yearCatMap.get(name) ?? { total: 0, mine: 0, cohost: 0 };
                         const h = (entry.duration_secs ?? 0) / 3600;
-                        yearCatMap.set(name, { total: prev.total + h, mine: prev.mine + h, spouse: prev.spouse });
+                        yearCatMap.set(name, { total: prev.total + h, mine: prev.mine + h, cohost: prev.cohost });
                       }
                       if (showCombined) {
-                        for (const entry of yearSpouseActivity) {
+                        for (const entry of yearCohostActivity) {
                           const name = entry.title || entry.category;
-                          const prev = yearCatMap.get(name) ?? { total: 0, mine: 0, spouse: 0 };
+                          const prev = yearCatMap.get(name) ?? { total: 0, mine: 0, cohost: 0 };
                           const h = (entry.duration_secs ?? 0) / 3600;
-                          yearCatMap.set(name, { total: prev.total + h, mine: prev.mine, spouse: prev.spouse + h });
+                          yearCatMap.set(name, { total: prev.total + h, mine: prev.mine, cohost: prev.cohost + h });
                         }
                       }
                       const yearCatBreakdown = Array.from(yearCatMap.entries())
-                        .map(([name, { total, mine, spouse }]) => ({
-                          name, hours: total, mine, spouse,
+                        .map(([name, { total, mine, cohost }]) => ({
+                          name, hours: total, mine, cohost,
                           pct: yearCombinedHours > 0 ? (total / yearCombinedHours) * 100 : 0,
                         }))
                         .sort((a, b) => b.hours - a.hours);
@@ -765,17 +758,17 @@ function ReportsContent() {
                       generateTaxPdf({
                         fullName,
                         userName,
-                        spouseName: showCombined ? spouseName : null,
+                        cohostName: showCombined ? cohostName : null,
                         showCombined,
                         taxYear: pdfYear,
                         goalHours,
                         targetTest,
                         totalHours: yearHours,
-                        spouseHours: yearSpouseHours,
+                        cohostHours: yearCohostHours,
                         propertyBreakdown: yearPropBreakdown,
                         categoryBreakdown: yearCatBreakdown,
                         activity: yearActivity,
-                        spouseActivity: yearSpouseActivity,
+                        cohostActivity: yearCohostActivity,
                         propertyFilter: activeProp,
                         teamMemberCount,
                       });
