@@ -26,6 +26,10 @@ const ALL_ROLES: TeamRole[] = ["spouse", "manager", "employee"];
 export default function TeamSettingsPage() {
   const [ownerName, setOwnerName] = useState("");
   const [ownerEmail, setOwnerEmail] = useState("");
+  const [isTeamMember, setIsTeamMember] = useState(false);
+  const [teamOwnerName, setTeamOwnerName] = useState("");
+  const [teamOwnerEmail, setTeamOwnerEmail] = useState("");
+  const [teamRole, setTeamRole] = useState<string | null>(null);
   const [members, setMembers] = useState<TeamMember[]>([]);
   const [properties, setProperties] = useState<Property[]>([]);
   const [loading, setLoading] = useState(true);
@@ -106,6 +110,29 @@ export default function TeamSettingsPage() {
     }
 
     setMembers(teamMembers);
+
+    if (teamMembers.length === 0) {
+      const { data: membership } = await supabase
+        .from("team_members")
+        .select("owner_id, role")
+        .eq("member_id", user.id)
+        .eq("status", "active")
+        .limit(1)
+        .maybeSingle();
+
+      if (membership) {
+        setIsTeamMember(true);
+        setTeamRole(membership.role);
+        const { data: ownerProf } = await supabase
+          .from("profiles")
+          .select("full_name, email")
+          .eq("id", membership.owner_id)
+          .single();
+        setTeamOwnerName(ownerProf?.full_name || "");
+        setTeamOwnerEmail(ownerProf?.email || "");
+      }
+    }
+
     setLoading(false);
   }
 
@@ -196,10 +223,12 @@ export default function TeamSettingsPage() {
           Team
         </p>
         <h1 className="mt-1 font-serif text-[36px] text-plum leading-tight">
-          Your team.
+          {isTeamMember && members.length === 0 ? `${teamOwnerName || "Team"}’s team.` : "Your team."}
         </h1>
         <p className="font-sans text-[13px] text-slate leading-relaxed mt-1">
-          Invite your spouse, a manager, or an employee to track hours on your properties.
+          {isTeamMember && members.length === 0
+            ? `You’re a ${ROLE_LABELS[teamRole as TeamRole]?.toLowerCase() || "member"} on this team.`
+            : "Invite your spouse, a manager, or an employee to track hours on your properties."}
         </p>
       </header>
 
@@ -208,6 +237,50 @@ export default function TeamSettingsPage() {
           <p className="text-[13px] text-tangerine">{error}</p>
         </div>
       )}
+
+      {isTeamMember && members.length === 0 ? (
+        /* Team member view — show the owner and the user's role */
+        <div className="mt-4">
+          <div className="px-7 py-5 border-b border-chalk">
+            <div className="min-w-0">
+              <div className="flex items-center gap-2 mb-0.5">
+                <span className="font-serif text-[17px] font-medium text-char tracking-[-0.2px]">
+                  {teamOwnerName || teamOwnerEmail}
+                </span>
+              </div>
+              {teamOwnerName && (
+                <div className="text-[12px] text-slate mb-1">{teamOwnerEmail}</div>
+              )}
+              <div className="flex items-center gap-1.5 mt-1">
+                <span className="font-mono text-[10px] uppercase tracking-[1px] text-plum font-medium">
+                  Owner
+                </span>
+              </div>
+            </div>
+          </div>
+          <div className="px-7 py-5 border-b border-chalk">
+            <div className="min-w-0">
+              <div className="flex items-center gap-2 mb-0.5">
+                <span className="font-serif text-[17px] font-medium text-char tracking-[-0.2px]">
+                  {ownerName || ownerEmail}
+                </span>
+                <span className="shrink-0 px-2 py-0.5 rounded-full text-[10px] font-mono uppercase tracking-[1px] font-medium bg-success/15 text-success">
+                  active
+                </span>
+              </div>
+              {ownerName && (
+                <div className="text-[12px] text-slate mb-1">{ownerEmail}</div>
+              )}
+              <div className="flex items-center gap-1.5 mt-1">
+                <span className="font-mono text-[10px] uppercase tracking-[1px] text-plum font-medium">
+                  {ROLE_LABELS[teamRole as TeamRole] || teamRole}
+                </span>
+              </div>
+            </div>
+          </div>
+        </div>
+      ) : (
+        <>
 
       {/* Owner + Team members list */}
       <div className="mt-4">
@@ -578,6 +651,9 @@ export default function TeamSettingsPage() {
           </div>
         ))}
       </div>
+
+      </>
+      )}
     </div>
   );
 }
