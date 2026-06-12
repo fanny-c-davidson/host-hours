@@ -29,7 +29,6 @@ export default function PropertiesPage() {
         supabase
           .from("properties")
           .select("id, name, address, color, tags, deleted_at")
-          .eq("user_id", user.id)
           .order("created_at", { ascending: false }),
         supabase
           .from("time_logs")
