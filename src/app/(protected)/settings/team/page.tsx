@@ -146,10 +146,13 @@ export default function TeamSettingsPage() {
             .from("property_assignments")
             .select("property_id")
             .eq("team_member_id", tm.id);
+          const nameParts = mName?.split(" ") ?? [];
           ownerTeamMembers.push({
             ...tm,
             role: tm.role as TeamRole,
             status: tm.status as "pending" | "active" | "suspended",
+            first_name: tm.first_name || nameParts[0] || null,
+            last_name: tm.last_name || nameParts.slice(1).join(" ") || null,
             memberName: mName,
             propertyIds: (assignments ?? []).map((a) => a.property_id),
           });
@@ -197,10 +200,13 @@ export default function TeamSettingsPage() {
         .select("property_id")
         .eq("team_member_id", tm.id);
 
+      const nameParts = memberName?.split(" ") ?? [];
       teamMembers.push({
         ...tm,
         role: tm.role as TeamRole,
         status: tm.status as "pending" | "active" | "suspended",
+        first_name: tm.first_name || nameParts[0] || null,
+        last_name: tm.last_name || nameParts.slice(1).join(" ") || null,
         memberName,
         propertyIds: (assignments ?? []).map((a) => a.property_id),
       });
