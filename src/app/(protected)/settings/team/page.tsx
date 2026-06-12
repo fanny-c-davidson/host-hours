@@ -3,7 +3,7 @@
 import { useEffect, useState } from "react";
 import { TopStrip } from "@/components/top-strip";
 import { createClient } from "@/lib/supabase/client";
-import { inviteTeamMember, updateTeamMemberRole, updateTeamMemberEmail, removeTeamMember } from "@/lib/actions/team";
+import { inviteTeamMember, updateTeamMemberRole, updateTeamMemberEmail, removeTeamMember, transferOwnership } from "@/lib/actions/team";
 import { ROLE_LABELS, ROLE_DESCRIPTIONS, type TeamRole } from "@/lib/permissions";
 
 type TeamMember = {
@@ -24,6 +24,7 @@ type Property = {
 const ALL_ROLES: TeamRole[] = ["spouse", "manager", "employee"];
 
 export default function TeamSettingsPage() {
+  const [userId, setUserId] = useState("");
   const [ownerName, setOwnerName] = useState("");
   const [ownerEmail, setOwnerEmail] = useState("");
   const [isTeamMember, setIsTeamMember] = useState(false);
@@ -49,15 +50,26 @@ export default function TeamSettingsPage() {
 
   const [confirmRemoveId, setConfirmRemoveId] = useState<string | null>(null);
   const [keepHours, setKeepHours] = useState(true);
+  const [showTransferConfirm, setShowTransferConfirm] = useState(false);
+  const [transferring, setTransferring] = useState(false);
 
   useEffect(() => {
     loadTeam();
   }, []);
 
   async function loadTeam() {
+    setIsTeamMember(false);
+    setTeamOwnerName("");
+    setTeamOwnerEmail("");
+    setTeamRole(null);
+    setTeamOwnerId(null);
+    setMembers([]);
+    setProperties([]);
+
     const supabase = createClient();
     const { data: { user } } = await supabase.auth.getUser();
     if (!user) return;
+    setUserId(user.id);
 
     const { data: profile } = await supabase
       .from("profiles")
@@ -220,9 +232,10 @@ export default function TeamSettingsPage() {
     setError(null);
     const emailChanged = editEmail.trim().toLowerCase() !== member.email.toLowerCase();
     const roleChanged = editRole !== member.role;
+    const ownerParam = teamOwnerId || undefined;
 
     if (emailChanged) {
-      const result = await updateTeamMemberEmail(member.id, editEmail);
+      const result = await updateTeamMemberEmail(member.id, editEmail, ownerParam);
       if (result.error) {
         setError(result.error);
         return;
@@ -230,7 +243,7 @@ export default function TeamSettingsPage() {
     }
 
     if (roleChanged) {
-      const result = await updateTeamMemberRole(member.id, editRole);
+      const result = await updateTeamMemberRole(member.id, editRole, ownerParam);
       if (result.error) {
         setError(result.error);
         return;
@@ -243,13 +256,31 @@ export default function TeamSettingsPage() {
 
   async function handleRemove(memberId: string) {
     setError(null);
-    const result = await removeTeamMember(memberId, keepHours);
+    const result = await removeTeamMember(memberId, keepHours, teamOwnerId || undefined);
     if (result.error) {
       setError(result.error);
       return;
     }
     setConfirmRemoveId(null);
     setKeepHours(true);
+    loadTeam();
+  }
+
+  async function handleTransfer() {
+    setTransferring(true);
+    setError(null);
+    const newOwnerId = teamOwnerId
+      ? userId
+      : members.find((m) => m.role === "spouse" && m.status === "active")?.member_id;
+    if (!newOwnerId) return;
+    const result = await transferOwnership(newOwnerId);
+    if (result.error) {
+      setError(result.error);
+      setTransferring(false);
+      return;
+    }
+    setShowTransferConfirm(false);
+    setTransferring(false);
     loadTeam();
   }
 
@@ -263,6 +294,10 @@ export default function TeamSettingsPage() {
 
   const hasSpouse = members.some((m) => m.role === "spouse") || teamRole === "spouse";
   const inviteRoles = hasSpouse ? ALL_ROLES.filter((r) => r !== "spouse") : ALL_ROLES;
+  const spouseMember = members.find((m) => m.role === "spouse" && m.status === "active");
+  const canTransfer = teamOwnerId || (spouseMember?.member_id != null);
+  const transferTargetName = teamOwnerId ? ownerName : (spouseMember?.memberName || spouseMember?.email);
+  const transferFromName = teamOwnerId ? teamOwnerName : ownerName;
 
   if (loading) {
     return (
@@ -717,6 +752,49 @@ export default function TeamSettingsPage() {
             + Invite team member
           </button>
         </div>
+      )}
+
+      {/* Transfer ownership */}
+      {canTransfer && (
+        showTransferConfirm ? (
+          <div className="mx-7 mt-6 p-5 rounded-md border border-tangerine/30 bg-tangerine/5">
+            <h3 className="font-serif text-[18px] font-medium text-char mb-2">
+              Transfer ownership?
+            </h3>
+            <div className="text-[13px] text-quill leading-relaxed space-y-1 mb-4">
+              <p><strong>{transferTargetName}</strong> will become the team owner.</p>
+              <p><strong>{transferFromName}</strong> will become a spouse.</p>
+              <p>All properties will transfer to the new owner.</p>
+            </div>
+            <div className="flex gap-2">
+              <button
+                type="button"
+                onClick={handleTransfer}
+                disabled={transferring}
+                className="min-h-10 px-4 py-2 rounded-md text-[13px] font-medium bg-tangerine text-cream hover:bg-tangerine/90 transition-colors disabled:opacity-50"
+              >
+                {transferring ? "Transferring..." : "Transfer"}
+              </button>
+              <button
+                type="button"
+                onClick={() => setShowTransferConfirm(false)}
+                className="min-h-10 px-4 py-2 rounded-md text-[13px] text-quill hover:text-char transition-colors"
+              >
+                Cancel
+              </button>
+            </div>
+          </div>
+        ) : (
+          <div className="px-7 mt-4">
+            <button
+              type="button"
+              onClick={() => setShowTransferConfirm(true)}
+              className="w-full min-h-12 py-3 rounded-md text-center font-mono text-[11px] tracking-[1.5px] uppercase text-slate border border-chalk hover:border-tangerine hover:text-tangerine active:scale-[0.98] transition-all"
+            >
+              {teamOwnerId ? "Become team owner" : `Transfer ownership to ${spouseMember?.memberName || spouseMember?.email}`}
+            </button>
+          </div>
+        )
       )}
 
       {/* Role legend */}

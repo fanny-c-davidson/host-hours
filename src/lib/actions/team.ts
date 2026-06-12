@@ -6,6 +6,24 @@ import { sendInvitationEmail } from "@/lib/email";
 import type { ActionResult } from "@/types/app";
 import type { TeamRole } from "@/lib/permissions";
 
+async function resolveOwnerId(
+  supabase: Awaited<ReturnType<typeof createClient>>,
+  userId: string,
+  ownerId?: string,
+): Promise<{ effectiveOwnerId: string | null; error: string | null }> {
+  if (!ownerId || ownerId === userId) return { effectiveOwnerId: userId, error: null };
+  const { data: spouseCheck } = await supabase
+    .from("team_members")
+    .select("id")
+    .eq("owner_id", ownerId)
+    .eq("member_id", userId)
+    .eq("role", "spouse")
+    .eq("status", "active")
+    .maybeSingle();
+  if (!spouseCheck) return { effectiveOwnerId: null, error: "You don't have permission to manage this team" };
+  return { effectiveOwnerId: ownerId, error: null };
+}
+
 type InviteResult = { teamMemberId: string; invitationToken: string };
 
 export async function inviteTeamMember(
@@ -23,21 +41,8 @@ export async function inviteTeamMember(
 
   const supabase = await createClient();
 
-  let effectiveOwnerId = user.id;
-  if (ownerId && ownerId !== user.id) {
-    const { data: spouseCheck } = await supabase
-      .from("team_members")
-      .select("id")
-      .eq("owner_id", ownerId)
-      .eq("member_id", user.id)
-      .eq("role", "spouse")
-      .eq("status", "active")
-      .maybeSingle();
-    if (!spouseCheck) {
-      return { data: null, error: "You don't have permission to invite for this team" };
-    }
-    effectiveOwnerId = ownerId;
-  }
+  const { effectiveOwnerId, error: ownerErr } = await resolveOwnerId(supabase, user.id, ownerId);
+  if (!effectiveOwnerId) return { data: null, error: ownerErr! };
 
   const { data: existing } = await supabase
     .from("team_members")
@@ -110,7 +115,6 @@ export async function inviteTeamMember(
       token: invitation.token,
     });
   } catch {
-    // Don't fail the invitation — the team member and token were created successfully
     console.error("Invitation created but email delivery failed for", email);
   }
 
@@ -123,17 +127,21 @@ export async function inviteTeamMember(
 export async function updateTeamMemberRole(
   teamMemberId: string,
   role: TeamRole,
+  ownerId?: string,
 ): Promise<ActionResult> {
   const user = await getAuthenticatedUser();
   if (!user) return UNAUTHORIZED;
 
   const supabase = await createClient();
 
+  const { effectiveOwnerId, error: ownerErr } = await resolveOwnerId(supabase, user.id, ownerId);
+  if (!effectiveOwnerId) return { data: null, error: ownerErr! };
+
   if (role === "spouse") {
     const { data: existingSpouse } = await supabase
       .from("team_members")
       .select("id")
-      .eq("owner_id", user.id)
+      .eq("owner_id", effectiveOwnerId)
       .eq("role", "spouse")
       .neq("id", teamMemberId)
       .maybeSingle();
@@ -147,7 +155,7 @@ export async function updateTeamMemberRole(
     .from("team_members")
     .update({ role })
     .eq("id", teamMemberId)
-    .eq("owner_id", user.id);
+    .eq("owner_id", effectiveOwnerId);
 
   if (error) return { data: null, error: error.message };
   return { data: undefined, error: null };
@@ -156,6 +164,7 @@ export async function updateTeamMemberRole(
 export async function updateTeamMemberEmail(
   teamMemberId: string,
   email: string,
+  ownerId?: string,
 ): Promise<ActionResult> {
   const user = await getAuthenticatedUser();
   if (!user) return UNAUTHORIZED;
@@ -171,10 +180,13 @@ export async function updateTeamMemberEmail(
 
   const supabase = await createClient();
 
+  const { effectiveOwnerId, error: ownerErr } = await resolveOwnerId(supabase, user.id, ownerId);
+  if (!effectiveOwnerId) return { data: null, error: ownerErr! };
+
   const { data: existing } = await supabase
     .from("team_members")
     .select("id")
-    .eq("owner_id", user.id)
+    .eq("owner_id", effectiveOwnerId)
     .eq("email", normalized)
     .neq("id", teamMemberId)
     .maybeSingle();
@@ -187,7 +199,7 @@ export async function updateTeamMemberEmail(
     .from("team_members")
     .update({ email: normalized, member_id: null, status: "pending" })
     .eq("id", teamMemberId)
-    .eq("owner_id", user.id);
+    .eq("owner_id", effectiveOwnerId);
 
   if (error) return { data: null, error: error.message };
   return { data: undefined, error: null };
@@ -196,17 +208,21 @@ export async function updateTeamMemberEmail(
 export async function removeTeamMember(
   teamMemberId: string,
   keepHours: boolean = false,
+  ownerId?: string,
 ): Promise<ActionResult> {
   const user = await getAuthenticatedUser();
   if (!user) return UNAUTHORIZED;
 
   const supabase = await createClient();
 
+  const { effectiveOwnerId, error: ownerErr } = await resolveOwnerId(supabase, user.id, ownerId);
+  if (!effectiveOwnerId) return { data: null, error: ownerErr! };
+
   const { data: member } = await supabase
     .from("team_members")
     .select("id, member_id")
     .eq("id", teamMemberId)
-    .eq("owner_id", user.id)
+    .eq("owner_id", effectiveOwnerId)
     .single();
 
   if (!member) {
@@ -217,14 +233,14 @@ export async function removeTeamMember(
     const { data: properties } = await supabase
       .from("properties")
       .select("id")
-      .eq("user_id", user.id);
+      .eq("user_id", effectiveOwnerId);
 
     const propertyIds = (properties ?? []).map((p) => p.id);
 
     if (propertyIds.length > 0) {
       await supabase
         .from("time_logs")
-        .update({ user_id: user.id })
+        .update({ user_id: effectiveOwnerId })
         .eq("user_id", member.member_id)
         .in("property_id", propertyIds);
     }
@@ -234,7 +250,7 @@ export async function removeTeamMember(
     .from("team_members")
     .delete()
     .eq("id", teamMemberId)
-    .eq("owner_id", user.id);
+    .eq("owner_id", effectiveOwnerId);
 
   if (error) return { data: null, error: error.message };
 
@@ -243,9 +259,24 @@ export async function removeTeamMember(
       .from("team_members")
       .delete()
       .eq("owner_id", member.member_id)
-      .eq("member_id", user.id);
+      .eq("member_id", effectiveOwnerId);
   }
 
+  return { data: undefined, error: null };
+}
+
+export async function transferOwnership(
+  newOwnerId: string,
+): Promise<ActionResult> {
+  const user = await getAuthenticatedUser();
+  if (!user) return UNAUTHORIZED;
+
+  const supabase = await createClient();
+  const { error } = await supabase.rpc("transfer_team_ownership", {
+    new_owner_id: newOwnerId,
+  });
+
+  if (error) return { data: null, error: error.message };
   return { data: undefined, error: null };
 }
 
@@ -309,17 +340,21 @@ export async function acceptInvitation(
 export async function updatePropertyAssignments(
   teamMemberId: string,
   propertyIds: string[],
+  ownerId?: string,
 ): Promise<ActionResult> {
   const user = await getAuthenticatedUser();
   if (!user) return UNAUTHORIZED;
 
   const supabase = await createClient();
 
+  const { effectiveOwnerId, error: ownerErr } = await resolveOwnerId(supabase, user.id, ownerId);
+  if (!effectiveOwnerId) return { data: null, error: ownerErr! };
+
   const { data: member } = await supabase
     .from("team_members")
     .select("id")
     .eq("id", teamMemberId)
-    .eq("owner_id", user.id)
+    .eq("owner_id", effectiveOwnerId)
     .maybeSingle();
 
   if (!member) {
