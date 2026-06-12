@@ -117,6 +117,38 @@ function ReportsContent() {
           setCohostActivity(cohostEntries);
           const cTotal = cohostEntries.reduce((s, r) => s + (r.duration_secs ?? 0), 0);
           setCohostHours(cTotal / 3600);
+        } else {
+          // Check if current user is a spouse on someone else's team
+          const { data: myMembership } = await supabase
+            .from("team_members")
+            .select("owner_id")
+            .eq("member_id", user.id)
+            .eq("role", "spouse")
+            .eq("status", "active")
+            .limit(1)
+            .maybeSingle();
+
+          if (myMembership?.owner_id) {
+            setCohostLinked(true);
+            const { data: ownerProfile } = await supabase
+              .from("profiles")
+              .select("full_name")
+              .eq("id", myMembership.owner_id)
+              .single();
+            const ownerFirstName = ownerProfile?.full_name?.split(" ")[0];
+            setCohostName(ownerFirstName || "Owner");
+
+            const { data: ownerLogs } = await supabase
+              .from("time_logs")
+              .select("id, title, category, started_at, duration_secs, description, property:properties(name, address)")
+              .eq("user_id", myMembership.owner_id)
+              .is("deleted_at", null)
+              .order("started_at", { ascending: false });
+            const ownerEntries = (ownerLogs as TimeLog[] | null) ?? [];
+            setCohostActivity(ownerEntries);
+            const oTotal = ownerEntries.reduce((s, r) => s + (r.duration_secs ?? 0), 0);
+            setCohostHours(oTotal / 3600);
+          }
         }
 
       const [{ data: props }, { data: logs }] = await Promise.all([
