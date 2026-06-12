@@ -30,6 +30,7 @@ export default function TeamSettingsPage() {
   const [teamOwnerName, setTeamOwnerName] = useState("");
   const [teamOwnerEmail, setTeamOwnerEmail] = useState("");
   const [teamRole, setTeamRole] = useState<string | null>(null);
+  const [teamOwnerId, setTeamOwnerId] = useState<string | null>(null);
   const [members, setMembers] = useState<TeamMember[]>([]);
   const [properties, setProperties] = useState<Property[]>([]);
   const [loading, setLoading] = useState(true);
@@ -75,7 +76,6 @@ export default function TeamSettingsPage() {
       supabase
         .from("properties")
         .select("id, name")
-        .eq("user_id", user.id)
         .is("deleted_at", null)
         .order("name"),
     ]);
@@ -135,6 +135,45 @@ export default function TeamSettingsPage() {
           .single();
         setTeamOwnerName(ownerProf?.full_name || "");
         setTeamOwnerEmail(ownerProf?.email || "");
+
+        if (membership.role === "spouse") {
+          setTeamOwnerId(membership.owner_id);
+
+          const { data: ownerTeamData } = await supabase
+            .from("team_members")
+            .select("id, email, role, status, member_id")
+            .eq("owner_id", membership.owner_id)
+            .order("created_at", { ascending: true });
+
+          const ownerFiltered = (ownerTeamData ?? []).filter(
+            (t) => t.member_id !== user.id && t.email.toLowerCase() !== userEmail
+          );
+
+          const ownerTeamMembers: TeamMember[] = [];
+          for (const tm of ownerFiltered) {
+            let mName: string | null = null;
+            if (tm.member_id) {
+              const { data: p } = await supabase
+                .from("profiles")
+                .select("full_name")
+                .eq("id", tm.member_id)
+                .single();
+              mName = p?.full_name ?? null;
+            }
+            const { data: assignments } = await supabase
+              .from("property_assignments")
+              .select("property_id")
+              .eq("team_member_id", tm.id);
+            ownerTeamMembers.push({
+              ...tm,
+              role: tm.role as TeamRole,
+              status: tm.status as "pending" | "active" | "suspended",
+              memberName: mName,
+              propertyIds: (assignments ?? []).map((a) => a.property_id),
+            });
+          }
+          setMembers(ownerTeamMembers);
+        }
       }
     }
 
@@ -148,7 +187,7 @@ export default function TeamSettingsPage() {
     setInviteSaving(true);
     setError(null);
 
-    const result = await inviteTeamMember(email, inviteRole, invitePropertyIds);
+    const result = await inviteTeamMember(email, inviteRole, invitePropertyIds, teamOwnerId || undefined);
     if (result.error) {
       setError(result.error);
       setInviteSaving(false);
@@ -208,7 +247,7 @@ export default function TeamSettingsPage() {
     );
   }
 
-  const hasSpouse = members.some((m) => m.role === "spouse");
+  const hasSpouse = members.some((m) => m.role === "spouse") || teamRole === "spouse";
   const inviteRoles = hasSpouse ? ALL_ROLES.filter((r) => r !== "spouse") : ALL_ROLES;
 
   if (loading) {
@@ -228,10 +267,10 @@ export default function TeamSettingsPage() {
           Team
         </p>
         <h1 className="mt-1 font-serif text-[36px] text-plum leading-tight">
-          {isTeamMember && members.length === 0 ? `${teamOwnerName || "Team"}’s team.` : "Your team."}
+          {isTeamMember ? `${teamOwnerName || "Team"}’s team.` : "Your team."}
         </h1>
         <p className="font-sans text-[13px] text-slate leading-relaxed mt-1">
-          {isTeamMember && members.length === 0
+          {isTeamMember
             ? `You’re a ${ROLE_LABELS[teamRole as TeamRole]?.toLowerCase() || "member"} on this team.`
             : "Invite your spouse, a manager, or an employee to track hours on your properties."}
         </p>
@@ -243,8 +282,8 @@ export default function TeamSettingsPage() {
         </div>
       )}
 
-      {isTeamMember && members.length === 0 ? (
-        /* Team member view — show the owner and the user's role */
+      {isTeamMember && teamRole !== "spouse" && members.length === 0 ? (
+        /* Team member view (manager/employee) — show the owner and the user's role */
         <div className="mt-4">
           <div className="px-7 py-5 border-b border-chalk">
             <div className="min-w-0">
@@ -289,15 +328,18 @@ export default function TeamSettingsPage() {
 
       {/* Owner + Team members list */}
       <div className="mt-4">
+        {/* Owner row */}
         <div className="px-7 py-5 border-b border-chalk">
           <div className="min-w-0">
             <div className="flex items-center gap-2 mb-0.5">
               <span className="font-serif text-[17px] font-medium text-char tracking-[-0.2px]">
-                {ownerName || ownerEmail}
+                {teamOwnerId ? (teamOwnerName || teamOwnerEmail) : (ownerName || ownerEmail)}
               </span>
             </div>
-            {ownerName && (
-              <div className="text-[12px] text-slate mb-1">{ownerEmail}</div>
+            {(teamOwnerId ? teamOwnerName : ownerName) && (
+              <div className="text-[12px] text-slate mb-1">
+                {teamOwnerId ? teamOwnerEmail : ownerEmail}
+              </div>
             )}
             <div className="flex items-center gap-1.5 mt-1">
               <span className="font-mono text-[10px] uppercase tracking-[1px] text-plum font-medium">
@@ -306,6 +348,29 @@ export default function TeamSettingsPage() {
             </div>
           </div>
         </div>
+        {/* Spouse's own row (when viewing as spouse) */}
+        {teamOwnerId && (
+          <div className="px-7 py-5 border-b border-chalk">
+            <div className="min-w-0">
+              <div className="flex items-center gap-2 mb-0.5">
+                <span className="font-serif text-[17px] font-medium text-char tracking-[-0.2px]">
+                  {ownerName || ownerEmail}
+                </span>
+                <span className="shrink-0 px-2 py-0.5 rounded-full text-[10px] font-mono uppercase tracking-[1px] font-medium bg-success/15 text-success">
+                  active
+                </span>
+              </div>
+              {ownerName && (
+                <div className="text-[12px] text-slate mb-1">{ownerEmail}</div>
+              )}
+              <div className="flex items-center gap-1.5 mt-1">
+                <span className="font-mono text-[10px] uppercase tracking-[1px] text-plum font-medium">
+                  Spouse
+                </span>
+              </div>
+            </div>
+          </div>
+        )}
         {members.map((m) => (
             <div key={m.id} className="px-7 py-5 border-b border-chalk">
               <div className="flex items-start justify-between gap-3">

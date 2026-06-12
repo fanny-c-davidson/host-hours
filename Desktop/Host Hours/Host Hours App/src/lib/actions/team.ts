@@ -12,6 +12,7 @@ export async function inviteTeamMember(
   email: string,
   role: TeamRole,
   propertyIds: string[],
+  ownerId?: string,
 ): Promise<ActionResult<InviteResult>> {
   const user = await getAuthenticatedUser();
   if (!user) return UNAUTHORIZED;
@@ -22,10 +23,26 @@ export async function inviteTeamMember(
 
   const supabase = await createClient();
 
+  let effectiveOwnerId = user.id;
+  if (ownerId && ownerId !== user.id) {
+    const { data: spouseCheck } = await supabase
+      .from("team_members")
+      .select("id")
+      .eq("owner_id", ownerId)
+      .eq("member_id", user.id)
+      .eq("role", "spouse")
+      .eq("status", "active")
+      .maybeSingle();
+    if (!spouseCheck) {
+      return { data: null, error: "You don't have permission to invite for this team" };
+    }
+    effectiveOwnerId = ownerId;
+  }
+
   const { data: existing } = await supabase
     .from("team_members")
     .select("id")
-    .eq("owner_id", user.id)
+    .eq("owner_id", effectiveOwnerId)
     .eq("email", email.toLowerCase())
     .maybeSingle();
 
@@ -37,7 +54,7 @@ export async function inviteTeamMember(
     const { data: existingSpouse } = await supabase
       .from("team_members")
       .select("id")
-      .eq("owner_id", user.id)
+      .eq("owner_id", effectiveOwnerId)
       .eq("role", "spouse")
       .maybeSingle();
 
@@ -49,7 +66,7 @@ export async function inviteTeamMember(
   const { data: member, error: memberErr } = await supabase
     .from("team_members")
     .insert({
-      owner_id: user.id,
+      owner_id: effectiveOwnerId,
       email: email.toLowerCase(),
       role,
       status: "pending",
@@ -82,7 +99,7 @@ export async function inviteTeamMember(
   const { data: ownerProfile } = await supabase
     .from("profiles")
     .select("full_name")
-    .eq("id", user.id)
+    .eq("id", effectiveOwnerId)
     .single();
 
   try {
