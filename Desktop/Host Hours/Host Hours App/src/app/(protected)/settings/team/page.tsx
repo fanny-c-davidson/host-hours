@@ -83,8 +83,13 @@ export default function TeamSettingsPage() {
     const props = propsData ?? [];
     setProperties(props);
 
+    const userEmail = (user.email || "").toLowerCase();
+    const filtered = (teamData ?? []).filter(
+      (t) => t.member_id !== user.id && t.email.toLowerCase() !== userEmail
+    );
+
     const teamMembers: TeamMember[] = [];
-    for (const tm of teamData ?? []) {
+    for (const tm of filtered) {
       let memberName: string | null = null;
       if (tm.member_id) {
         const { data: profile } = await supabase

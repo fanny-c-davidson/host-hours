@@ -160,7 +160,12 @@ export default function SettingsPage() {
         .select("id, role, status, email, member_id")
         .eq("owner_id", user.id);
 
-      const activeTeam = (teamData ?? []).filter((t) => t.status === "active" || t.status === "pending");
+      const userEmail = (user.email || "").toLowerCase();
+      const activeTeam = (teamData ?? []).filter((t) =>
+        (t.status === "active" || t.status === "pending") &&
+        t.member_id !== user.id &&
+        t.email.toLowerCase() !== userEmail
+      );
       setTeamCount(activeTeam.length);
 
       const memberIds = activeTeam.filter((t) => t.member_id).map((t) => t.member_id!);
