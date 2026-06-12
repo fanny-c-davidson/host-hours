@@ -67,6 +67,82 @@ export default function TeamSettingsPage() {
     setOwnerName(profile?.full_name || "");
     setOwnerEmail(profile?.email || user.email || "");
 
+    const userEmail = (user.email || "").toLowerCase();
+
+    // Always check membership first — determines if user is a spouse/member
+    const { data: membership } = await supabase
+      .from("team_members")
+      .select("owner_id, role")
+      .eq("member_id", user.id)
+      .eq("status", "active")
+      .neq("owner_id", user.id)
+      .limit(1)
+      .maybeSingle();
+
+    if (membership) {
+      setIsTeamMember(true);
+      setTeamRole(membership.role);
+
+      const { data: ownerProf } = await supabase
+        .from("profiles")
+        .select("full_name, email")
+        .eq("id", membership.owner_id)
+        .single();
+      setTeamOwnerName(ownerProf?.full_name || "");
+      setTeamOwnerEmail(ownerProf?.email || "");
+
+      if (membership.role === "spouse") {
+        setTeamOwnerId(membership.owner_id);
+
+        const [{ data: ownerTeamData }, { data: propsData }] = await Promise.all([
+          supabase
+            .from("team_members")
+            .select("id, email, role, status, member_id")
+            .eq("owner_id", membership.owner_id)
+            .order("created_at", { ascending: true }),
+          supabase
+            .from("properties")
+            .select("id, name")
+            .is("deleted_at", null)
+            .order("name"),
+        ]);
+
+        setProperties(propsData ?? []);
+
+        const ownerFiltered = (ownerTeamData ?? []).filter(
+          (t) => t.member_id !== user.id && t.email.toLowerCase() !== userEmail
+        );
+
+        const ownerTeamMembers: TeamMember[] = [];
+        for (const tm of ownerFiltered) {
+          let mName: string | null = null;
+          if (tm.member_id) {
+            const { data: p } = await supabase
+              .from("profiles")
+              .select("full_name")
+              .eq("id", tm.member_id)
+              .single();
+            mName = p?.full_name ?? null;
+          }
+          const { data: assignments } = await supabase
+            .from("property_assignments")
+            .select("property_id")
+            .eq("team_member_id", tm.id);
+          ownerTeamMembers.push({
+            ...tm,
+            role: tm.role as TeamRole,
+            status: tm.status as "pending" | "active" | "suspended",
+            memberName: mName,
+            propertyIds: (assignments ?? []).map((a) => a.property_id),
+          });
+        }
+        setMembers(ownerTeamMembers);
+        setLoading(false);
+        return;
+      }
+    }
+
+    // Owner view — load own team
     const [{ data: teamData }, { data: propsData }] = await Promise.all([
       supabase
         .from("team_members")
@@ -80,10 +156,8 @@ export default function TeamSettingsPage() {
         .order("name"),
     ]);
 
-    const props = propsData ?? [];
-    setProperties(props);
+    setProperties(propsData ?? []);
 
-    const userEmail = (user.email || "").toLowerCase();
     const filtered = (teamData ?? []).filter(
       (t) => t.member_id !== user.id && t.email.toLowerCase() !== userEmail
     );
@@ -92,12 +166,12 @@ export default function TeamSettingsPage() {
     for (const tm of filtered) {
       let memberName: string | null = null;
       if (tm.member_id) {
-        const { data: profile } = await supabase
+        const { data: p } = await supabase
           .from("profiles")
           .select("full_name")
           .eq("id", tm.member_id)
           .single();
-        memberName = profile?.full_name ?? null;
+        memberName = p?.full_name ?? null;
       }
 
       const { data: assignments } = await supabase
@@ -115,68 +189,6 @@ export default function TeamSettingsPage() {
     }
 
     setMembers(teamMembers);
-
-    if (teamMembers.length === 0) {
-      const { data: membership } = await supabase
-        .from("team_members")
-        .select("owner_id, role")
-        .eq("member_id", user.id)
-        .eq("status", "active")
-        .limit(1)
-        .maybeSingle();
-
-      if (membership) {
-        setIsTeamMember(true);
-        setTeamRole(membership.role);
-        const { data: ownerProf } = await supabase
-          .from("profiles")
-          .select("full_name, email")
-          .eq("id", membership.owner_id)
-          .single();
-        setTeamOwnerName(ownerProf?.full_name || "");
-        setTeamOwnerEmail(ownerProf?.email || "");
-
-        if (membership.role === "spouse") {
-          setTeamOwnerId(membership.owner_id);
-
-          const { data: ownerTeamData } = await supabase
-            .from("team_members")
-            .select("id, email, role, status, member_id")
-            .eq("owner_id", membership.owner_id)
-            .order("created_at", { ascending: true });
-
-          const ownerFiltered = (ownerTeamData ?? []).filter(
-            (t) => t.member_id !== user.id && t.email.toLowerCase() !== userEmail
-          );
-
-          const ownerTeamMembers: TeamMember[] = [];
-          for (const tm of ownerFiltered) {
-            let mName: string | null = null;
-            if (tm.member_id) {
-              const { data: p } = await supabase
-                .from("profiles")
-                .select("full_name")
-                .eq("id", tm.member_id)
-                .single();
-              mName = p?.full_name ?? null;
-            }
-            const { data: assignments } = await supabase
-              .from("property_assignments")
-              .select("property_id")
-              .eq("team_member_id", tm.id);
-            ownerTeamMembers.push({
-              ...tm,
-              role: tm.role as TeamRole,
-              status: tm.status as "pending" | "active" | "suspended",
-              memberName: mName,
-              propertyIds: (assignments ?? []).map((a) => a.property_id),
-            });
-          }
-          setMembers(ownerTeamMembers);
-        }
-      }
-    }
-
     setLoading(false);
   }
 
