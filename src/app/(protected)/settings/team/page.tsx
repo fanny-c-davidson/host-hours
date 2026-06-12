@@ -43,7 +43,6 @@ export default function TeamSettingsPage() {
   const [invitePropertyIds, setInvitePropertyIds] = useState<string[]>([]);
   const [inviteSaving, setInviteSaving] = useState(false);
 
-  const [debug, setDebug] = useState("");
   const [editingId, setEditingId] = useState<string | null>(null);
   const [editRole, setEditRole] = useState<TeamRole>("employee");
   const [editEmail, setEditEmail] = useState("");
@@ -80,8 +79,6 @@ export default function TeamSettingsPage() {
       .limit(1)
       .maybeSingle();
 
-    setDebug(`uid=${user.id}, membership=${JSON.stringify(membership)}, err=${membershipErr?.message || "none"}`);
-
     if (membership) {
       setIsTeamMember(true);
       setTeamRole(membership.role);
@@ -113,7 +110,9 @@ export default function TeamSettingsPage() {
         setProperties(propsData ?? []);
 
         const ownerFiltered = (ownerTeamData ?? []).filter(
-          (t) => t.member_id !== user.id && t.email.toLowerCase() !== userEmail
+          (t) => t.member_id !== user.id
+            && t.email.toLowerCase() !== userEmail
+            && t.member_id !== membership.owner_id
         );
 
         const ownerTeamMembers: TeamMember[] = [];
@@ -276,12 +275,6 @@ export default function TeamSettingsPage() {
   return (
     <div className="min-h-screen bg-cream pb-8">
       <TopStrip backHref="/settings" label="Team" />
-
-      {debug && (
-        <div className="px-7 py-2 bg-tangerine/10 border-b border-tangerine/30">
-          <p className="text-[11px] text-tangerine font-mono break-all">{debug}</p>
-        </div>
-      )}
 
       <header className="px-7 py-6 border-b border-chalk">
         <p className="font-mono text-[10px] uppercase tracking-[1.5px] text-tangerine font-medium">
