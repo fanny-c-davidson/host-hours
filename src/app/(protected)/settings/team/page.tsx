@@ -3,7 +3,7 @@
 import { useEffect, useState } from "react";
 import { TopStrip } from "@/components/top-strip";
 import { createClient } from "@/lib/supabase/client";
-import { inviteTeamMember, updateTeamMemberRole, updateTeamMemberEmail, removeTeamMember, transferOwnership } from "@/lib/actions/team";
+import { inviteTeamMember, updateTeamMemberRole, updateTeamMemberEmail, updateTeamMemberName, removeTeamMember, transferOwnership } from "@/lib/actions/team";
 import { ROLE_LABELS, ROLE_DESCRIPTIONS, type TeamRole } from "@/lib/permissions";
 
 type TeamMember = {
@@ -12,6 +12,8 @@ type TeamMember = {
   role: TeamRole;
   status: "pending" | "active" | "suspended";
   member_id: string | null;
+  first_name: string | null;
+  last_name: string | null;
   memberName: string | null;
   propertyIds: string[];
 };
@@ -47,6 +49,8 @@ export default function TeamSettingsPage() {
   const [editingId, setEditingId] = useState<string | null>(null);
   const [editRole, setEditRole] = useState<TeamRole>("employee");
   const [editEmail, setEditEmail] = useState("");
+  const [editFirstName, setEditFirstName] = useState("");
+  const [editLastName, setEditLastName] = useState("");
 
   const [confirmRemoveId, setConfirmRemoveId] = useState<string | null>(null);
   const [keepHours, setKeepHours] = useState(true);
@@ -109,7 +113,7 @@ export default function TeamSettingsPage() {
         const [{ data: ownerTeamData }, { data: propsData }] = await Promise.all([
           supabase
             .from("team_members")
-            .select("id, email, role, status, member_id")
+            .select("id, email, role, status, member_id, first_name, last_name")
             .eq("owner_id", membership.owner_id)
             .order("created_at", { ascending: true }),
           supabase
@@ -160,7 +164,7 @@ export default function TeamSettingsPage() {
     const [{ data: teamData }, { data: propsData }] = await Promise.all([
       supabase
         .from("team_members")
-        .select("id, email, role, status, member_id")
+        .select("id, email, role, status, member_id, first_name, last_name")
         .eq("owner_id", user.id)
         .order("created_at", { ascending: true }),
       supabase
@@ -232,7 +236,16 @@ export default function TeamSettingsPage() {
     setError(null);
     const emailChanged = editEmail.trim().toLowerCase() !== member.email.toLowerCase();
     const roleChanged = editRole !== member.role;
+    const nameChanged = editFirstName.trim() !== (member.first_name || "") || editLastName.trim() !== (member.last_name || "");
     const ownerParam = teamOwnerId || undefined;
+
+    if (nameChanged) {
+      const result = await updateTeamMemberName(member.id, editFirstName, editLastName, ownerParam);
+      if (result.error) {
+        setError(result.error);
+        return;
+      }
+    }
 
     if (emailChanged) {
       const result = await updateTeamMemberEmail(member.id, editEmail, ownerParam);
@@ -426,7 +439,7 @@ export default function TeamSettingsPage() {
                 <div className="min-w-0 flex-1">
                   <div className="flex items-center gap-2 mb-0.5">
                     <span className="font-serif text-[17px] font-medium text-char tracking-[-0.2px] truncate">
-                      {m.memberName || m.email}
+                      {[m.first_name, m.last_name].filter(Boolean).join(" ") || m.memberName || m.email}
                     </span>
                     <span
                       className={`shrink-0 px-2 py-0.5 rounded-full text-[10px] font-mono uppercase tracking-[1px] font-medium ${
@@ -440,7 +453,7 @@ export default function TeamSettingsPage() {
                       {m.status}
                     </span>
                   </div>
-                  {m.memberName && (
+                  {(m.first_name || m.memberName) && (
                     <div className="text-[12px] text-slate mb-1">{m.email}</div>
                   )}
                   <div className="flex items-center gap-1.5 mt-1">
@@ -464,6 +477,8 @@ export default function TeamSettingsPage() {
                           setEditingId(m.id);
                           setEditRole(m.role);
                           setEditEmail(m.email);
+                          setEditFirstName(m.first_name || "");
+                          setEditLastName(m.last_name || "");
                         }}
                         className="min-h-[36px] px-3 py-1.5 rounded-md font-mono text-[10px] uppercase tracking-[1px] text-slate hover:text-plum hover:bg-plum-mist transition-colors"
                       >
@@ -487,6 +502,33 @@ export default function TeamSettingsPage() {
               {/* Inline role editor */}
               {editingId === m.id && (
                 <div className="mt-4 p-4 rounded-md border border-chalk bg-vellum">
+                  <div className="flex gap-3 mb-4">
+                    <div className="flex-1">
+                      <label className="font-mono text-[10px] tracking-[1.5px] uppercase text-quill font-medium mb-2 block">
+                        First name
+                      </label>
+                      <input
+                        type="text"
+                        value={editFirstName}
+                        onChange={(e) => setEditFirstName(e.target.value)}
+                        placeholder="First"
+                        className="w-full min-h-11 px-4 py-3 border border-chalk rounded-md text-[15px] text-char bg-cream focus:outline-none focus:border-plum focus:ring-2 focus:ring-plum-mist placeholder:text-stone"
+                      />
+                    </div>
+                    <div className="flex-1">
+                      <label className="font-mono text-[10px] tracking-[1.5px] uppercase text-quill font-medium mb-2 block">
+                        Last name
+                      </label>
+                      <input
+                        type="text"
+                        value={editLastName}
+                        onChange={(e) => setEditLastName(e.target.value)}
+                        placeholder="Last"
+                        className="w-full min-h-11 px-4 py-3 border border-chalk rounded-md text-[15px] text-char bg-cream focus:outline-none focus:border-plum focus:ring-2 focus:ring-plum-mist placeholder:text-stone"
+                      />
+                    </div>
+                  </div>
+
                   <label className="font-mono text-[10px] tracking-[1.5px] uppercase text-quill font-medium mb-2 block">
                     Email
                   </label>
@@ -534,7 +576,7 @@ export default function TeamSettingsPage() {
                     <button
                       type="button"
                       onClick={() => handleSaveEdit(m)}
-                      disabled={editRole === m.role && editEmail.trim().toLowerCase() === m.email.toLowerCase()}
+                      disabled={editRole === m.role && editEmail.trim().toLowerCase() === m.email.toLowerCase() && editFirstName.trim() === (m.first_name || "") && editLastName.trim() === (m.last_name || "")}
                       className="min-h-10 px-4 py-2 rounded-md text-[13px] font-medium bg-plum text-cream hover:bg-plum-deep transition-colors disabled:opacity-50"
                     >
                       Save

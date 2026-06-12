@@ -161,6 +161,33 @@ export async function updateTeamMemberRole(
   return { data: undefined, error: null };
 }
 
+export async function updateTeamMemberName(
+  teamMemberId: string,
+  firstName: string,
+  lastName: string,
+  ownerId?: string,
+): Promise<ActionResult> {
+  const user = await getAuthenticatedUser();
+  if (!user) return UNAUTHORIZED;
+
+  const supabase = await createClient();
+
+  const { effectiveOwnerId, error: ownerErr } = await resolveOwnerId(supabase, user.id, ownerId);
+  if (!effectiveOwnerId) return { data: null, error: ownerErr! };
+
+  const { error } = await supabase
+    .from("team_members")
+    .update({
+      first_name: firstName.trim() || null,
+      last_name: lastName.trim() || null,
+    })
+    .eq("id", teamMemberId)
+    .eq("owner_id", effectiveOwnerId);
+
+  if (error) return { data: null, error: error.message };
+  return { data: undefined, error: null };
+}
+
 export async function updateTeamMemberEmail(
   teamMemberId: string,
   email: string,
