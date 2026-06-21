@@ -12,9 +12,12 @@ type TaskType = {
 export function TaskTypePicker({
   selected,
   onSelect,
+  single = false,
 }: {
   selected: string[];
   onSelect: (names: string[]) => void;
+  /** Exclusive select — at most one task at a time */
+  single?: boolean;
 }) {
   const [types, setTypes] = useState<TaskType[]>([]);
   const [loading, setLoading] = useState(true);
@@ -23,19 +26,18 @@ export function TaskTypePicker({
   const [editMode, setEditMode] = useState(false);
 
   useEffect(() => {
+    async function loadTypes() {
+      const supabase = createClient();
+      const { data } = await supabase
+        .from("task_types")
+        .select("id, name, sort_order")
+        .order("sort_order", { ascending: true });
+
+      setTypes(data ?? []);
+      setLoading(false);
+    }
     loadTypes();
   }, []);
-
-  async function loadTypes() {
-    const supabase = createClient();
-    const { data } = await supabase
-      .from("task_types")
-      .select("id, name, sort_order")
-      .order("sort_order", { ascending: true });
-
-    setTypes(data ?? []);
-    setLoading(false);
-  }
 
   async function handleAdd() {
     const name = newName.trim();
@@ -86,7 +88,9 @@ export function TaskTypePicker({
                 type="button"
                 onClick={() => {
                   if (editMode) return;
-                  if (active) {
+                  if (single) {
+                    onSelect(active ? [] : [t.name]);
+                  } else if (active) {
                     onSelect(selected.filter((s) => s !== t.name));
                   } else {
                     onSelect([...selected, t.name]);

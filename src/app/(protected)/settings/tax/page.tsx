@@ -11,19 +11,12 @@ const targetTests = [
   { id: "substantially", label: "Substantially all", description: "Generally requires performing substantially all work on the activity." },
 ];
 
-type SpouseLink = {
-  id: string;
-  requester_id: string;
-  partner_email: string;
-  partner_id: string | null;
-  status: "pending" | "active";
-};
-
 export default function TaxSettingsPage() {
   const router = useRouter();
   const [taxYear, setTaxYear] = useState("2026");
   const [targetTest, setTargetTest] = useState("500");
   const [goalHours, setGoalHours] = useState("500");
+  const [isStaff, setIsStaff] = useState(false);
   const [loading, setLoading] = useState(true);
   const [saving, setSaving] = useState(false);
   const [error, setError] = useState<string | null>(null);
@@ -31,22 +24,11 @@ export default function TaxSettingsPage() {
   const [newYear, setNewYear] = useState("");
   const [years, setYears] = useState<string[]>(["2026"]);
 
-  const [userId, setUserId] = useState<string | null>(null);
-  const [userEmail, setUserEmail] = useState("");
-  const [spouseLink, setSpouseLink] = useState<SpouseLink | null>(null);
-  const [spouseName, setSpouseName] = useState<string | null>(null);
-  const [inviteEmail, setInviteEmail] = useState("");
-  const [spouseError, setSpouseError] = useState<string | null>(null);
-  const [spouseSaving, setSpouseSaving] = useState(false);
-
   useEffect(() => {
     async function load() {
       const supabase = createClient();
       const { data: { user } } = await supabase.auth.getUser();
       if (!user) return;
-
-      setUserId(user.id);
-      setUserEmail(user.email ?? "");
 
       const { data } = await supabase
         .from("profiles")
@@ -54,124 +36,32 @@ export default function TaxSettingsPage() {
         .eq("id", user.id)
         .single();
 
+      // Helpers/managers have no IRS target test; their goal defaults to 100.
+      const { data: membership } = await supabase
+        .from("team_members")
+        .select("role")
+        .eq("member_id", user.id)
+        .eq("status", "active")
+        .neq("owner_id", user.id)
+        .limit(1)
+        .maybeSingle();
+      const staff = membership?.role === "employee" || membership?.role === "manager";
+      setIsStaff(staff);
+
       if (data) {
         const savedYear = String(data.tax_year);
         setTaxYear(savedYear);
         setTargetTest(data.target_test);
-        setGoalHours(String(data.goal_hours));
+        setGoalHours(String(staff && data.goal_hours === 500 ? 100 : data.goal_hours));
         setYears((prev) =>
           prev.includes(savedYear) ? prev : [...prev, savedYear].sort().reverse()
         );
       }
 
-      await loadSpouseLink(user.id, user.email ?? "");
       setLoading(false);
     }
     load();
   }, []);
-
-  async function loadSpouseLink(uid: string, email: string) {
-    const supabase = createClient();
-
-    const { data: sent } = await supabase
-      .from("spouse_links")
-      .select("id, requester_id, partner_email, partner_id, status")
-      .eq("requester_id", uid)
-      .limit(1)
-      .single();
-
-    if (sent) {
-      setSpouseLink(sent);
-      if (sent.partner_id) {
-        const { data: profile } = await supabase
-          .from("profiles")
-          .select("full_name")
-          .eq("id", sent.partner_id)
-          .single();
-        setSpouseName(profile?.full_name ?? sent.partner_email);
-      }
-      return;
-    }
-
-    const { data: received } = await supabase
-      .from("spouse_links")
-      .select("id, requester_id, partner_email, partner_id, status")
-      .eq("partner_email", email)
-      .limit(1)
-      .single();
-
-    if (received) {
-      setSpouseLink(received);
-      const { data: profile } = await supabase
-        .from("profiles")
-        .select("full_name")
-        .eq("id", received.requester_id)
-        .single();
-      setSpouseName(profile?.full_name ?? null);
-      return;
-    }
-
-    setSpouseLink(null);
-    setSpouseName(null);
-  }
-
-  async function sendInvite() {
-    const email = inviteEmail.trim().toLowerCase();
-    if (!email || !userId) return;
-    if (email === userEmail.toLowerCase()) {
-      setSpouseError("You can't link to your own account.");
-      return;
-    }
-
-    setSpouseSaving(true);
-    setSpouseError(null);
-    const supabase = createClient();
-
-    const { error: insertErr } = await supabase
-      .from("spouse_links")
-      .insert({ requester_id: userId, partner_email: email });
-
-    if (insertErr) {
-      setSpouseError(insertErr.message.includes("unique")
-        ? "You already have a pending or active link."
-        : insertErr.message);
-      setSpouseSaving(false);
-      return;
-    }
-
-    setInviteEmail("");
-    await loadSpouseLink(userId, userEmail);
-    setSpouseSaving(false);
-  }
-
-  async function acceptInvite() {
-    if (!spouseLink || !userId) return;
-    setSpouseSaving(true);
-    const supabase = createClient();
-
-    await supabase
-      .from("spouse_links")
-      .update({ partner_id: userId, status: "active" })
-      .eq("id", spouseLink.id);
-
-    await loadSpouseLink(userId, userEmail);
-    setSpouseSaving(false);
-  }
-
-  async function unlinkSpouse() {
-    if (!spouseLink) return;
-    setSpouseSaving(true);
-    const supabase = createClient();
-
-    await supabase
-      .from("spouse_links")
-      .delete()
-      .eq("id", spouseLink.id);
-
-    setSpouseLink(null);
-    setSpouseName(null);
-    setSpouseSaving(false);
-  }
 
   async function handleSubmit(e: React.FormEvent<HTMLFormElement>) {
     e.preventDefault();
@@ -210,9 +100,6 @@ export default function TaxSettingsPage() {
 
     router.push("/settings");
   }
-
-  const isRequester = spouseLink?.requester_id === userId;
-  const isPendingForMe = spouseLink?.status === "pending" && !isRequester;
 
   if (loading) {
     return (
@@ -324,37 +211,39 @@ export default function TaxSettingsPage() {
           )}
         </div>
 
-        {/* Target test */}
-        <div>
-          <label className="font-mono text-[10px] tracking-[1.5px] uppercase text-quill font-medium mb-3 block">
-            Target test <span className="text-tangerine">*</span>
-          </label>
-          <div className="flex flex-col gap-2">
-            {targetTests.map((test) => (
-              <button
-                key={test.id}
-                type="button"
-                onClick={() => {
-                  setTargetTest(test.id);
-                  if (test.id === "500") setGoalHours("500");
-                  if (test.id === "100") setGoalHours("100");
-                }}
-                className={`text-left px-4 py-3.5 rounded-md border transition-colors ${
-                  targetTest === test.id
-                    ? "border-plum bg-plum-mist"
-                    : "border-chalk bg-cream hover:border-plum"
-                }`}
-              >
-                <span className="font-serif text-[16px] font-medium text-char block">
-                  {test.label}
-                </span>
-                <span className="text-[12px] text-slate leading-relaxed">
-                  {test.description}
-                </span>
-              </button>
-            ))}
+        {/* Target test — owners/spouses only; not relevant to helpers/managers */}
+        {!isStaff && (
+          <div>
+            <label className="font-mono text-[10px] tracking-[1.5px] uppercase text-quill font-medium mb-3 block">
+              Target test <span className="text-tangerine">*</span>
+            </label>
+            <div className="flex flex-col gap-2">
+              {targetTests.map((test) => (
+                <button
+                  key={test.id}
+                  type="button"
+                  onClick={() => {
+                    setTargetTest(test.id);
+                    if (test.id === "500") setGoalHours("500");
+                    if (test.id === "100") setGoalHours("100");
+                  }}
+                  className={`text-left px-4 py-3.5 rounded-md border transition-colors ${
+                    targetTest === test.id
+                      ? "border-plum bg-plum-mist"
+                      : "border-chalk bg-cream hover:border-plum"
+                  }`}
+                >
+                  <span className="font-serif text-[16px] font-medium text-char block">
+                    {test.label}
+                  </span>
+                  <span className="text-[12px] text-slate leading-relaxed">
+                    {test.description}
+                  </span>
+                </button>
+              ))}
+            </div>
           </div>
-        </div>
+        )}
 
         {/* Annual goal */}
         <div>
@@ -393,133 +282,6 @@ export default function TaxSettingsPage() {
         </div>
       </form>
 
-      {/* ── Spouse / partner linking ────────────────────────────── */}
-      <div className="px-7 pt-2 pb-6">
-        <div className="border-t border-chalk pt-6">
-          <span className="font-mono text-[10px] tracking-[2px] uppercase text-tangerine font-medium">
-            Spouse account
-          </span>
-          <h2 className="font-serif text-[22px] text-plum mt-1 mb-1">
-            Link a spouse.
-          </h2>
-          <p className="font-sans text-[13px] text-slate leading-relaxed mb-5">
-            Spouses may be able to combine participation hours. Consult your
-            tax advisor. Link accounts to see combined totals on Reports.
-          </p>
-
-          {spouseError && (
-            <div className="mb-4 px-4 py-3 rounded-md bg-tangerine/10 border border-tangerine/30">
-              <p className="text-[13px] text-tangerine">{spouseError}</p>
-            </div>
-          )}
-
-          {/* No link yet */}
-          {!spouseLink && (
-            <div className="flex items-center gap-2">
-              <input
-                type="email"
-                value={inviteEmail}
-                onChange={(e) => setInviteEmail(e.target.value)}
-                onKeyDown={(e) => {
-                  if (e.key === "Enter") { e.preventDefault(); sendInvite(); }
-                }}
-                placeholder="Spouse's email address"
-                className="flex-1 min-h-12 px-4 py-3.5 border border-chalk rounded-md text-[15px] text-char bg-cream focus:outline-none focus:border-plum focus:ring-2 focus:ring-plum-mist placeholder:text-stone"
-              />
-              <button
-                type="button"
-                onClick={sendInvite}
-                disabled={spouseSaving || !inviteEmail.trim()}
-                className="min-h-12 px-5 py-3.5 rounded-md text-[13px] font-medium bg-plum text-cream hover:bg-plum-deep transition-colors disabled:opacity-50"
-              >
-                {spouseSaving ? "Sending…" : "Link"}
-              </button>
-            </div>
-          )}
-
-          {/* Pending — I sent it */}
-          {spouseLink?.status === "pending" && isRequester && (
-            <div className="p-4 rounded-md border border-chalk bg-vellum">
-              <div className="flex items-center gap-2 mb-2">
-                <span className="w-2 h-2 rounded-full bg-tangerine animate-pulse-dot" />
-                <span className="font-mono text-[10px] uppercase tracking-[1.5px] text-tangerine font-medium">
-                  Pending
-                </span>
-              </div>
-              <p className="font-serif text-[15px] text-char mb-1">
-                Invitation sent to <strong>{spouseLink.partner_email}</strong>
-              </p>
-              <p className="font-sans text-[12px] text-slate mb-4">
-                They need to log in and accept the link from their Tax settings.
-              </p>
-              <button
-                type="button"
-                onClick={unlinkSpouse}
-                disabled={spouseSaving}
-                className="min-h-11 px-4 py-2 rounded-md font-mono text-[10px] uppercase tracking-[1.5px] text-tangerine border border-chalk hover:border-tangerine transition-colors disabled:opacity-50"
-              >
-                Cancel invite
-              </button>
-            </div>
-          )}
-
-          {/* Pending — sent to me */}
-          {isPendingForMe && (
-            <div className="p-4 rounded-md border border-plum bg-plum-mist">
-              <p className="font-serif text-[15px] text-char mb-1">
-                <strong>{spouseName ?? "Your spouse"}</strong> wants to link accounts
-              </p>
-              <p className="font-sans text-[12px] text-slate mb-4">
-                Accept to combine hours on your Reports page.
-              </p>
-              <div className="flex gap-2">
-                <button
-                  type="button"
-                  onClick={acceptInvite}
-                  disabled={spouseSaving}
-                  className="min-h-11 px-5 py-2 rounded-md text-[13px] font-medium bg-plum text-cream hover:bg-plum-deep transition-colors disabled:opacity-50"
-                >
-                  Accept
-                </button>
-                <button
-                  type="button"
-                  onClick={unlinkSpouse}
-                  disabled={spouseSaving}
-                  className="min-h-11 px-4 py-2 rounded-md text-[13px] text-quill border border-chalk hover:border-stone transition-colors disabled:opacity-50"
-                >
-                  Decline
-                </button>
-              </div>
-            </div>
-          )}
-
-          {/* Active link */}
-          {spouseLink?.status === "active" && (
-            <div className="p-4 rounded-md border border-chalk bg-vellum">
-              <div className="flex items-center gap-2 mb-2">
-                <span className="w-2 h-2 rounded-full bg-success" />
-                <span className="font-mono text-[10px] uppercase tracking-[1.5px] text-success font-medium">
-                  Linked
-                </span>
-              </div>
-              <p className="font-serif text-[15px] text-char mb-1">
-                Linked with <strong>{spouseName ?? (isRequester ? spouseLink.partner_email : "your spouse")}</strong>
-              </p>
-              <p className="font-sans text-[12px] text-slate mb-4">
-                Combined hours are available on the Reports page.
-              </p>
-              <button
-                type="button"
-                onClick={unlinkSpouse}
-                disabled={spouseSaving}
-                className="min-h-11 px-4 py-2 rounded-md font-mono text-[10px] uppercase tracking-[1.5px] text-tangerine border border-chalk hover:border-tangerine transition-colors disabled:opacity-50"
-              >
-                Unlink
-              </button>
-            </div>
-          )}
-        </div>
-      </div>
     </div>
   );
 }

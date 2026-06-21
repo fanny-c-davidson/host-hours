@@ -2,7 +2,6 @@
 
 import Link from "next/link";
 import { useEffect, useState } from "react";
-import { useRouter } from "next/navigation";
 import { TopStrip } from "@/components/top-strip";
 import { createClient } from "@/lib/supabase/client";
 
@@ -28,7 +27,6 @@ const PLAN_INFO: Record<string, { name: string; price: string; suffix: string; d
 };
 
 export default function BillingPage() {
-  const router = useRouter();
   const [tierId, setTierId] = useState("free");
   const [periodEnd, setPeriodEnd] = useState<string | null>(null);
   const [loading, setLoading] = useState(true);

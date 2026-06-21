@@ -96,7 +96,7 @@ export default function EditPropertyPage() {
     setSaving(true);
     const supabase = createClient();
 
-    const { error: updateError } = await supabase
+    const { data: updated, error: updateError } = await supabase
       .from("properties")
       .update({
         name: trimmedName,
@@ -106,10 +106,20 @@ export default function EditPropertyPage() {
         latitude,
         longitude,
       })
-      .eq("id", id);
+      .eq("id", id)
+      .select("id");
 
     if (updateError) {
       setError(updateError.message);
+      setSaving(false);
+      return;
+    }
+
+    // An empty result means RLS matched no rows — i.e. the current user isn't
+    // allowed to edit this property. Without this check the save silently does
+    // nothing and still redirects, looking like it "worked".
+    if (!updated || updated.length === 0) {
+      setError("You don't have permission to edit this property.");
       setSaving(false);
       return;
     }
@@ -126,10 +136,21 @@ export default function EditPropertyPage() {
     setDeleting(true);
     const supabase = createClient();
 
-    await supabase
+    const { data: deleted, error: deleteError } = await supabase
       .from("properties")
       .update({ deleted_at: new Date().toISOString() })
-      .eq("id", id);
+      .eq("id", id)
+      .select("id");
+
+    if (deleteError || !deleted || deleted.length === 0) {
+      setError(
+        deleteError?.message ??
+          "You don't have permission to delete this property.",
+      );
+      setDeleting(false);
+      setConfirmDelete(false);
+      return;
+    }
 
     router.push("/properties");
   }

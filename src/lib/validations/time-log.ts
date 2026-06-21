@@ -7,6 +7,7 @@ const CategoryEnum = z.enum([
   'admin',
   'inspection',
   'staging',
+  'general_task',
   'other',
 ]);
 

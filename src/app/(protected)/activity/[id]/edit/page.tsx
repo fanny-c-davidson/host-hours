@@ -2,15 +2,20 @@
 
 import { useEffect, useState } from "react";
 import { useRouter, useParams } from "next/navigation";
+import Image from "next/image";
+import { PhotoUpload } from "@/components/photo-upload";
 import { TopStrip } from "@/components/top-strip";
 import { TaskTypePicker } from "@/components/task-type-picker";
+import { TimePicker } from "@/components/time-picker";
+import { OnsiteToggle } from "@/components/onsite-toggle";
 import { createClient } from "@/lib/supabase/client";
-import { uploadPhotos, deletePhoto, getSignedUrls } from "@/lib/photos";
+import { uploadPhotos, deletePhoto, MAX_PHOTOS_PER_ENTRY } from "@/lib/photos";
 
 type Property = {
   id: string;
   name: string;
   address: string | null;
+  isDeleted?: boolean;
 };
 
 function calcDuration(start: string, end: string): number | null {
@@ -41,6 +46,7 @@ export default function EditActivityPage() {
   const [endTime, setEndTime] = useState("");
   const [selectedCategories, setSelectedCategories] = useState<string[]>([]);
   const [notes, setNotes] = useState("");
+  const [onsite, setOnsite] = useState(false);
   const [loading, setLoading] = useState(true);
   const [saving, setSaving] = useState(false);
   const [deleting, setDeleting] = useState(false);
@@ -51,23 +57,26 @@ export default function EditActivityPage() {
 
   function handleFileSelect(e: React.ChangeEvent<HTMLInputElement>) {
     const files = Array.from(e.target.files ?? []);
-    const added = files.map((file) => ({
+    e.target.value = "";
+    const room = MAX_PHOTOS_PER_ENTRY - existingPhotos.length - newPhotos.length;
+    if (room <= 0) return;
+    const added = files.slice(0, room).map((file) => ({
       file,
       preview: URL.createObjectURL(file),
     }));
     setNewPhotos((prev) => [...prev, ...added]);
-    e.target.value = "";
   }
 
-  async function handleRemoveExisting(photoId: string, storagePath: string) {
-    const supabase = createClient();
-    await deletePhoto(supabase, photoId, storagePath);
+  async function handleRemoveExisting(photoId: string) {
+    await deletePhoto(photoId);
     setExistingPhotos((prev) => prev.filter((p) => p.id !== photoId));
   }
 
   useEffect(() => {
     async function load() {
       const supabase = createClient();
+      const { data: { user } } = await supabase.auth.getUser();
+      if (!user) return;
 
       const [{ data: props }, { data: entry }, { data: photoRows }] = await Promise.all([
         supabase
@@ -79,6 +88,7 @@ export default function EditActivityPage() {
           .from("time_logs")
           .select("*")
           .eq("id", id)
+          .eq("user_id", user.id)
           .is("deleted_at", null)
           .single(),
         supabase
@@ -87,17 +97,37 @@ export default function EditActivityPage() {
           .eq("time_log_id", id),
       ]);
 
-      setProperties(props ?? []);
+      const activeProps: Property[] = (props ?? []).map((p) => ({ ...p, isDeleted: false }));
 
       if (!entry) {
+        setProperties(activeProps);
         setNotFound(true);
         setLoading(false);
         return;
       }
 
+      const entryPropertyInList = activeProps.some((p) => p.id === entry.property_id);
+      if (!entryPropertyInList && entry.property_id) {
+        const { data: deletedProp } = await supabase
+          .from("properties")
+          .select("id, name, address")
+          .eq("id", entry.property_id)
+          .single();
+        if (deletedProp) {
+          activeProps.unshift({ ...deletedProp, isDeleted: true });
+        }
+      }
+      setProperties(activeProps);
+
       if (photoRows && photoRows.length > 0) {
-        const signed = await getSignedUrls(supabase, photoRows);
-        setExistingPhotos(signed);
+        setExistingPhotos(
+          photoRows.map((p) => ({
+            id: p.id,
+            storagePath: p.storage_path,
+            fileName: p.file_name,
+            url: `/api/receipt/${p.id}`,
+          })),
+        );
       }
 
       setPropertyId(entry.property_id);
@@ -114,6 +144,7 @@ export default function EditActivityPage() {
       setSelectedCategories(cats);
 
       setNotes(entry.description || "");
+      setOnsite(entry.is_onsite ?? false);
       setLoading(false);
     }
     load();
@@ -129,10 +160,6 @@ export default function EditActivityPage() {
       setError("Please select a property.");
       return;
     }
-    if (selectedCategories.length === 0) {
-      setError("Please select at least one category.");
-      return;
-    }
     if (!duration || duration <= 0) {
       setError("Please enter a valid time range.");
       return;
@@ -143,8 +170,10 @@ export default function EditActivityPage() {
 
     const startedAt = new Date(`${date}T${startTime}:00`).toISOString();
     const durationSecs = Math.round(duration * 3600);
-    const title = selectedCategories.join(", ");
-    const categoryKey = selectedCategories.map((c) => c.toLowerCase().replace(/[/ ]+/g, "_")).join(",");
+    const title = selectedCategories.length > 0 ? selectedCategories.join(", ") : "General Task";
+    const categoryKey = selectedCategories.length > 0
+      ? selectedCategories.map((c) => c.toLowerCase().replace(/[/ ]+/g, "_")).join(",")
+      : "general_task";
 
     const supabaseForUser = createClient();
     const { data: { user } } = await supabaseForUser.auth.getUser();
@@ -158,6 +187,7 @@ export default function EditActivityPage() {
         started_at: startedAt,
         duration_secs: durationSecs,
         description: notes.trim() || null,
+        is_onsite: onsite,
       })
       .eq("id", id);
 
@@ -168,7 +198,7 @@ export default function EditActivityPage() {
     }
 
     if (newPhotos.length > 0 && user) {
-      await uploadPhotos(supabase, user.id, id, newPhotos);
+      await uploadPhotos(id, newPhotos);
     }
 
     router.push("/dashboard");
@@ -242,7 +272,7 @@ export default function EditActivityPage() {
               </option>
               {properties.map((p) => (
                 <option key={p.id} value={p.id}>
-                  {p.name}{p.address ? ` — ${p.address}` : ""}
+                  {p.name}{p.isDeleted ? " (Deleted)" : ""}{p.address ? ` — ${p.address}` : ""}
                 </option>
               ))}
             </select>
@@ -280,18 +310,13 @@ export default function EditActivityPage() {
             Time worked
           </label>
           <div className="grid grid-cols-[1fr_auto_1fr] items-center gap-3">
-            <input
-              type="time"
-              value={startTime}
-              onChange={(e) => setStartTime(e.target.value)}
-              className="w-full min-h-12 px-4 py-3.5 border border-chalk rounded-md text-[15px] text-char bg-cream focus:outline-none focus:border-plum focus:shadow-[0_0_0_4px] focus:shadow-plum-mist"
-            />
+            <TimePicker size="md" value={startTime} onChange={setStartTime} />
             <span className="text-slate text-[15px]">&rarr;</span>
-            <input
-              type="time"
+            <TimePicker
+              size="md"
+              align="right"
               value={endTime}
-              onChange={(e) => setEndTime(e.target.value)}
-              className="w-full min-h-12 px-4 py-3.5 border border-chalk rounded-md text-[15px] text-char bg-cream focus:outline-none focus:border-plum focus:shadow-[0_0_0_4px] focus:shadow-plum-mist"
+              onChange={setEndTime}
             />
           </div>
 
@@ -300,8 +325,14 @@ export default function EditActivityPage() {
               Duration
             </span>
             <span className="font-serif text-[32px] text-plum tabular-nums leading-none">
-              {duration ? duration.toFixed(1) : "—"}{" "}
-              <span className="text-[16px] italic text-quill">hrs</span>
+              {duration
+                ? duration < 1.5
+                  ? `${Math.max(1, Math.ceil(duration * 60))}`
+                  : duration.toFixed(1)
+                : "—"}{" "}
+              <span className="text-[16px] italic text-quill">
+                {duration && duration < 1.5 ? "min" : "hrs"}
+              </span>
             </span>
           </div>
         </div>
@@ -309,12 +340,20 @@ export default function EditActivityPage() {
         {/* Category */}
         <div>
           <label className="font-mono text-[10px] tracking-[1.5px] uppercase text-quill font-medium mb-2 block">
-            What did you do? <span className="text-tangerine">*</span>
+            What did you do?
           </label>
           <TaskTypePicker
             selected={selectedCategories}
             onSelect={setSelectedCategories}
           />
+        </div>
+
+        {/* Location */}
+        <div>
+          <label className="font-mono text-[10px] tracking-[1.5px] uppercase text-quill font-medium mb-2 block">
+            Location
+          </label>
+          <OnsiteToggle value={onsite} onChange={setOnsite} />
         </div>
 
         {/* Notes */}
@@ -341,10 +380,17 @@ export default function EditActivityPage() {
             <div className="flex gap-3 overflow-x-auto pb-2 mb-3">
               {existingPhotos.map((photo) => (
                 <div key={photo.id} className="relative shrink-0 w-20 h-20 rounded-md overflow-hidden border border-chalk">
-                  <img src={photo.url} alt={photo.fileName} className="w-full h-full object-cover" />
+                  <Image
+                    src={`${photo.url}?thumb=1`}
+                    alt={photo.fileName}
+                    fill
+                    sizes="80px"
+                    unoptimized
+                    className="object-cover"
+                  />
                   <button
                     type="button"
-                    onClick={() => handleRemoveExisting(photo.id, photo.storagePath)}
+                    onClick={() => handleRemoveExisting(photo.id)}
                     className="absolute top-1 right-1 w-7 h-7 rounded-full bg-char/70 text-cream flex items-center justify-center text-[14px] leading-none"
                   >
                     ×
@@ -353,7 +399,14 @@ export default function EditActivityPage() {
               ))}
               {newPhotos.map((photo, i) => (
                 <div key={`new-${i}`} className="relative shrink-0 w-20 h-20 rounded-md overflow-hidden border border-chalk">
-                  <img src={photo.preview} alt="" className="w-full h-full object-cover" />
+                  <Image
+                    src={photo.preview}
+                    alt=""
+                    fill
+                    sizes="80px"
+                    unoptimized
+                    className="object-cover"
+                  />
                   <button
                     type="button"
                     onClick={() => setNewPhotos((prev) => prev.filter((_, j) => j !== i))}
@@ -366,25 +419,13 @@ export default function EditActivityPage() {
             </div>
           )}
 
-          <div className="grid grid-cols-2 gap-3">
-            <label className="flex items-center justify-center gap-2 border border-dashed border-stone rounded-md p-4 cursor-pointer hover:border-plum transition-colors">
-              <svg className="w-5 h-5 text-quill" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round">
-                <rect x="3" y="3" width="18" height="18" rx="2" />
-                <circle cx="8.5" cy="8.5" r="1.5" />
-                <path d="m21 15-5-5L5 21" />
-              </svg>
-              <span className="font-mono text-[10px] tracking-[1.5px] uppercase text-quill font-medium">Gallery</span>
-              <input type="file" accept="image/*" multiple className="hidden" onChange={handleFileSelect} />
-            </label>
-            <label className="flex items-center justify-center gap-2 border border-dashed border-stone rounded-md p-4 cursor-pointer hover:border-plum transition-colors">
-              <svg className="w-5 h-5 text-quill" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round">
-                <path d="M14.5 4h-5L7 7H4a2 2 0 0 0-2 2v9a2 2 0 0 0 2 2h16a2 2 0 0 0 2-2V9a2 2 0 0 0-2-2h-3l-2.5-3z" />
-                <circle cx="12" cy="13" r="3" />
-              </svg>
-              <span className="font-mono text-[10px] tracking-[1.5px] uppercase text-quill font-medium">Camera</span>
-              <input type="file" accept="image/*" capture="environment" className="hidden" onChange={handleFileSelect} />
-            </label>
-          </div>
+          {existingPhotos.length + newPhotos.length < MAX_PHOTOS_PER_ENTRY ? (
+            <PhotoUpload onChange={handleFileSelect} />
+          ) : (
+            <p className="text-[12px] text-slate text-center py-2">
+              Maximum {MAX_PHOTOS_PER_ENTRY} photos per entry.
+            </p>
+          )}
 
           <p className="mt-2 text-[12px] text-slate">
             Optional. Helpful for documentation.

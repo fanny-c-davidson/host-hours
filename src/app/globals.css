@@ -83,6 +83,26 @@ input, textarea, select {
   font-family: inherit;
 }
 
+/* Tint native form controls (incl. the time/date picker popup) with the brand plum */
+input[type="time"],
+input[type="date"],
+input[type="datetime-local"],
+input[type="checkbox"],
+input[type="radio"],
+input[type="range"] {
+  accent-color: var(--plum);
+}
+
+/* Plum-tint the clock/calendar indicator so it matches the picker */
+input[type="time"]::-webkit-calendar-picker-indicator,
+input[type="date"]::-webkit-calendar-picker-indicator,
+input[type="datetime-local"]::-webkit-calendar-picker-indicator {
+  cursor: pointer;
+  /* maps the default black icon onto ~plum (#4A148C) */
+  filter: invert(9%) sepia(96%) saturate(5752%) hue-rotate(271deg)
+    brightness(96%) contrast(101%);
+}
+
 /* Scrollbar styling */
 .scrollbar-thin {
   scrollbar-width: thin;

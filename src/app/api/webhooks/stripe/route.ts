@@ -178,9 +178,12 @@ async function handleCheckoutCompleted(
   //     and carries the full subscription object inline. handleSubscriptionUpserted()
   //     writes all the tier/price/status data with zero extra API calls.
 
+  const sessionWithSubData = session as unknown as {
+    subscription_data?: { metadata?: Record<string, string> };
+  };
   const userId =
     session.metadata?.supabase_user_id ??
-    ((session as any).subscription_data as any)?.metadata?.supabase_user_id;
+    sessionWithSubData.subscription_data?.metadata?.supabase_user_id;
 
   if (!userId) {
     throw new Error('supabase_user_id missing from checkout session metadata');
@@ -206,12 +209,19 @@ async function handleCheckoutCompleted(
 // The Stripe subscription object is delivered inline — no extra API calls needed.
 async function handleSubscriptionUpserted(
   supabase: ServiceClient,
-  subscription: Stripe.Subscription & Record<string, any>
+  subscription: Stripe.Subscription
 ) {
   const userId = await getUserIdFromCustomer(supabase, subscription.customer as string);
 
   const priceId = subscription.items.data[0]?.price?.id;
   const tier    = getTierFromPriceId(priceId);
+
+  // current_period_* arrive on the webhook payload but aren't in the Stripe
+  // type defs for this API version — read them via a narrow cast.
+  const periods = subscription as unknown as {
+    current_period_start: number;
+    current_period_end: number;
+  };
 
   await supabase
     .from('subscriptions')
@@ -219,9 +229,9 @@ async function handleSubscriptionUpserted(
       tier_id:                tier,
       stripe_subscription_id: subscription.id,
       stripe_price_id:        priceId ?? null,
-      status:                 subscription.status as any,
-      current_period_start:   new Date(subscription.current_period_start * 1000).toISOString(),
-      current_period_end:     new Date(subscription.current_period_end   * 1000).toISOString(),
+      status:                 subscription.status,
+      current_period_start:   new Date(periods.current_period_start * 1000).toISOString(),
+      current_period_end:     new Date(periods.current_period_end   * 1000).toISOString(),
       cancel_at_period_end:   subscription.cancel_at_period_end,
       trial_end:              subscription.trial_end
         ? new Date(subscription.trial_end * 1000).toISOString()

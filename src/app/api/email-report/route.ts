@@ -18,6 +18,10 @@ export async function POST(req: NextRequest) {
   const subject = `Host Hours Report — ${property || "All properties"} — ${new Date().toLocaleDateString("en-US", { month: "long", year: "numeric" })}`;
   const csvBase64 = Buffer.from(csv).toString("base64");
 
+  // Use the verified sender (same as invitation emails). The resend.dev testing
+  // domain can only email your own address, so it 403s for any other recipient.
+  const from = process.env.RESEND_FROM_EMAIL || "Host Hours <onboarding@resend.dev>";
+
   const res = await fetch("https://api.resend.com/emails", {
     method: "POST",
     headers: {
@@ -25,7 +29,7 @@ export async function POST(req: NextRequest) {
       "Content-Type": "application/json",
     },
     body: JSON.stringify({
-      from: "Host Hours <onboarding@resend.dev>",
+      from,
       to: [email],
       subject,
       text: `Your Host Hours report is attached.\n\nProperty: ${property || "All properties"}\nGenerated: ${new Date().toLocaleString("en-US")}\n\nThis is an automated report from Host Hours.`,

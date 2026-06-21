@@ -4,7 +4,7 @@ import { LogoMark } from "@/components/logo";
 export default function Home() {
   return (
     <div className="min-h-dvh bg-gradient-to-b from-cream via-cream to-paper">
-      <div className="mx-auto max-w-sm px-7 py-10 flex flex-col min-h-dvh">
+      <div className="mx-auto max-w-sm px-7 py-6 flex flex-col min-h-dvh">
         {/* ── Header ── */}
         <header className="flex items-center gap-3">
           <LogoMark className="w-9 h-9 shrink-0" />
@@ -13,60 +13,49 @@ export default function Home() {
           </span>
         </header>
 
-        {/* ── Chalk rule ── */}
-        <hr className="border-chalk mt-6 mb-8" />
-
-        {/* ── Eyebrow ── */}
-        <div className="flex items-center gap-3 mb-6">
-          <span className="font-mono text-[10px] tracking-[1.5px] uppercase text-quill whitespace-nowrap">
-            № 01&nbsp;&middot;&nbsp;The Cover
-          </span>
-          <span className="flex-1 h-px bg-tangerine" />
-        </div>
-
         {/* ── Headline ── */}
-        <h1 className="font-serif text-[64px] font-normal leading-[0.94] tracking-[-3px] text-plum mb-5">
+        <h1 className="font-serif text-[52px] font-normal leading-[0.94] tracking-[-2.5px] text-plum mt-6 mb-4">
           Time, made{" "}
           <em className="text-tangerine italic">visible.</em>
         </h1>
 
         {/* ── Deck ── */}
-        <p className="font-serif italic text-[17px] leading-relaxed text-quill mb-10">
-          A quiet, meticulous time-tracker built for short-term-rental hosts who
+        <p className="font-serif italic text-[16px] leading-relaxed text-quill mb-6">
+          A meticulous time-tracker for short-term-rental hosts who
           want to document their participation hours.
         </p>
 
         {/* ── Promises ── */}
-        <ol className="border-t border-b border-chalk divide-y divide-chalk mb-10">
-          <li className="py-4 flex gap-4">
+        <ol className="border-t border-b border-chalk divide-y divide-chalk mb-6">
+          <li className="py-3 flex gap-4">
             <span className="font-mono text-[11px] text-tangerine mt-0.5">01</span>
             <div>
-              <p className="font-medium text-[15px] text-plum leading-snug">
+              <p className="font-medium text-[14px] text-plum leading-snug">
                 Track toward your goal.
               </p>
-              <p className="text-[13px] text-slate mt-0.5 leading-snug">
+              <p className="text-[12px] text-slate mt-0.5 leading-snug">
                 Log hours with categories that map to common participation tests.
               </p>
             </div>
           </li>
-          <li className="py-4 flex gap-4">
+          <li className="py-3 flex gap-4">
             <span className="font-mono text-[11px] text-tangerine mt-0.5">02</span>
             <div>
-              <p className="font-medium text-[15px] text-plum leading-snug">
+              <p className="font-medium text-[14px] text-plum leading-snug">
                 Organized exports.
               </p>
-              <p className="text-[13px] text-slate mt-0.5 leading-snug">
+              <p className="text-[12px] text-slate mt-0.5 leading-snug">
                 One-tap PDF and CSV reports to share with your tax advisor.
               </p>
             </div>
           </li>
-          <li className="py-4 flex gap-4">
+          <li className="py-3 flex gap-4">
             <span className="font-mono text-[11px] text-tangerine mt-0.5">03</span>
             <div>
-              <p className="font-medium text-[15px] text-plum leading-snug">
+              <p className="font-medium text-[14px] text-plum leading-snug">
                 Two-tap logging.
               </p>
-              <p className="text-[13px] text-slate mt-0.5 leading-snug">
+              <p className="text-[12px] text-slate mt-0.5 leading-snug">
                 Start a timer or add an entry in under two seconds.
               </p>
             </div>
@@ -77,7 +66,7 @@ export default function Home() {
         <div className="flex-1" />
 
         {/* ── Footer CTA ── */}
-        <div className="flex flex-col gap-3 mb-4">
+        <div className="flex flex-col gap-3 mb-3">
           <Link
             href="/signup"
             className="btn--full flex items-center justify-center w-full bg-plum text-cream hover:bg-plum-deep min-h-12 px-5.5 py-3.5 rounded-md font-medium text-[15px] transition-colors"
@@ -92,7 +81,7 @@ export default function Home() {
           </Link>
         </div>
 
-        <p className="text-center text-[11px] text-slate pb-4">
+        <p className="text-center text-[11px] text-slate pb-2">
           One property free&nbsp;&middot;&nbsp;No card required
         </p>
       </div>
