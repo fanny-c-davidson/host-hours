@@ -15,7 +15,7 @@ const items = [
   },
   {
     href: "/reports",
-    label: "Reports",
+    label: "Hours",
     icon: (
       <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round">
         <line x1="18" y1="20" x2="18" y2="10" />

@@ -21,6 +21,20 @@ type TimeLog = {
   property: { name: string; address: string | null } | null;
 };
 
+type TeamMemberSummary = {
+  name: string;
+  role: string;
+  hours: number;
+  isYou: boolean;
+};
+
+const ROLE_DISPLAY: Record<string, string> = {
+  owner: "Owner",
+  spouse: "Spouse",
+  manager: "Manager",
+  employee: "Helper",
+};
+
 const CATEGORY_COLORS = [
   "bg-plum",
   "bg-tangerine",
@@ -42,7 +56,8 @@ export default function ReportsPage() {
 
 function ReportsContent() {
   const searchParams = useSearchParams();
-  const activeTab = searchParams.get("tab") === "activity" ? "activity" : "reports";
+  const tab = searchParams.get("tab");
+  const activeTab = tab === "activity" ? "activity" : tab === "team" ? "team" : tab === "export" ? "export" : "reports";
 
   const [properties, setProperties] = useState<Property[]>([]);
   const [allActivity, setAllActivity] = useState<TimeLog[]>([]);
@@ -61,6 +76,7 @@ function ReportsContent() {
   const [showCombined, setShowCombined] = useState(false);
   const [targetTest, setTargetTest] = useState("500");
   const [pdfYear, setPdfYear] = useState(new Date().getFullYear());
+  const [teamMembers, setTeamMembers] = useState<TeamMemberSummary[]>([]);
   const preselectedPropertyId = searchParams.get("property");
 
   useEffect(() => {
@@ -90,7 +106,7 @@ function ReportsContent() {
         // Check for active spouse on the user's team
         const { data: cohostMember } = await supabase
           .from("team_members")
-          .select("member_id, email")
+          .select("member_id, email, first_name")
           .eq("owner_id", user.id)
           .eq("role", "spouse")
           .eq("status", "active")
@@ -104,8 +120,8 @@ function ReportsContent() {
             .select("full_name")
             .eq("id", cohostMember.member_id)
             .single();
-          const name = cohostProfile?.full_name;
-          setCohostName(name ? name.split(" ")[0] : cohostMember.email);
+          const profileFirst = cohostProfile?.full_name?.split(" ")[0];
+          setCohostName(cohostMember.first_name || profileFirst || cohostMember.email);
 
           const { data: cohostLogs } = await supabase
             .from("time_logs")
@@ -180,6 +196,82 @@ function ReportsContent() {
 
       const total = entries.reduce((sum, e) => sum + (e.duration_secs ?? 0), 0);
       setTotalHours(total / 3600);
+
+      // Team tab data — works whether user is owner or member
+      let teamOwnerId = user.id;
+      let teamOwnerName = loadedFullName.split(" ")[0] || "You";
+
+      const { data: ownedTeamRows } = await supabase
+        .from("team_members")
+        .select("member_id, email, role, first_name, last_name")
+        .eq("owner_id", user.id)
+        .eq("status", "active");
+
+      let finalTeamRows = ownedTeamRows;
+
+      if (!ownedTeamRows || ownedTeamRows.length === 0) {
+        const { data: myTeam } = await supabase
+          .from("team_members")
+          .select("owner_id")
+          .eq("member_id", user.id)
+          .eq("status", "active")
+          .limit(1)
+          .maybeSingle();
+
+        if (myTeam?.owner_id) {
+          teamOwnerId = myTeam.owner_id;
+          const { data: ownerProfile } = await supabase
+            .from("profiles")
+            .select("full_name")
+            .eq("id", teamOwnerId)
+            .single();
+          teamOwnerName = ownerProfile?.full_name?.split(" ")[0] || "Owner";
+
+          const { data: rows } = await supabase
+            .from("team_members")
+            .select("member_id, email, role, first_name, last_name")
+            .eq("owner_id", teamOwnerId)
+            .eq("status", "active");
+          finalTeamRows = rows;
+        }
+      }
+
+      if (finalTeamRows && finalTeamRows.length > 0) {
+        const memberIds = finalTeamRows
+          .filter((m) => m.member_id)
+          .map((m) => m.member_id as string);
+
+        const hoursByUser = new Map<string, number>();
+        hoursByUser.set(user.id, total);
+
+        const otherIds = [...new Set([teamOwnerId, ...memberIds].filter((id) => id !== user.id))];
+        if (otherIds.length > 0) {
+          const { data: otherLogs } = await supabase
+            .from("time_logs")
+            .select("user_id, duration_secs")
+            .in("user_id", otherIds)
+            .is("deleted_at", null);
+          for (const log of (otherLogs ?? [])) {
+            hoursByUser.set(log.user_id, (hoursByUser.get(log.user_id) ?? 0) + (log.duration_secs ?? 0));
+          }
+        }
+
+        setTeamMembers([
+          {
+            name: teamOwnerId === user.id ? (loadedFullName.split(" ")[0] || "You") : teamOwnerName,
+            role: "owner",
+            hours: (hoursByUser.get(teamOwnerId) ?? 0) / 3600,
+            isYou: teamOwnerId === user.id,
+          },
+          ...finalTeamRows.map((m) => ({
+            name: [m.first_name, m.last_name].filter(Boolean).join(" ") || m.email,
+            role: m.role as string,
+            hours: m.member_id ? (hoursByUser.get(m.member_id) ?? 0) / 3600 : 0,
+            isYou: m.member_id === user.id,
+          })),
+        ]);
+      }
+
       setLoading(false);
     }
     load();
@@ -411,7 +503,7 @@ function ReportsContent() {
         {/* Header */}
         <div className="px-7 py-5 border-b border-chalk">
           <h1 className="font-serif text-[28px] text-plum">
-            {activeTab === "reports" ? "Reports" : "Activities"}
+            {activeTab === "reports" ? "My Hours" : activeTab === "activity" ? "Activity" : activeTab === "team" ? "Team" : "Reports"}
           </h1>
         </div>
 
@@ -425,17 +517,37 @@ function ReportsContent() {
                 : "text-quill border-transparent hover:text-plum"
             }`}
           >
-            Reports
+            My Hours
           </Link>
           <Link
             href="/reports?tab=activity"
-            className={`py-3 font-mono text-[11px] uppercase tracking-[1.5px] font-medium transition-colors border-b-2 ${
+            className={`py-3 mr-6 font-mono text-[11px] uppercase tracking-[1.5px] font-medium transition-colors border-b-2 ${
               activeTab === "activity"
                 ? "text-plum border-plum"
                 : "text-quill border-transparent hover:text-plum"
             }`}
           >
-            Activities
+            Activity
+          </Link>
+          <Link
+            href="/reports?tab=team"
+            className={`py-3 mr-6 font-mono text-[11px] uppercase tracking-[1.5px] font-medium transition-colors border-b-2 ${
+              activeTab === "team"
+                ? "text-plum border-plum"
+                : "text-quill border-transparent hover:text-plum"
+            }`}
+          >
+            Team
+          </Link>
+          <Link
+            href="/reports?tab=export"
+            className={`py-3 font-mono text-[11px] uppercase tracking-[1.5px] font-medium transition-colors border-b-2 ${
+              activeTab === "export"
+                ? "text-plum border-plum"
+                : "text-quill border-transparent hover:text-plum"
+            }`}
+          >
+            Reports
           </Link>
         </div>
 
@@ -495,7 +607,9 @@ function ReportsContent() {
                         </span>
                       </div>
                       <span className="font-serif text-[17px] text-plum tabular-nums">
-                        {(entry.duration_secs / 3600).toFixed(1)}h
+                        {entry.duration_secs < 3600
+                          ? `${Math.max(1, Math.ceil(entry.duration_secs / 60))}m`
+                          : `${(entry.duration_secs / 3600).toFixed(1)}h`}
                       </span>
                     </div>
                     {entry.description && (
@@ -606,11 +720,11 @@ function ReportsContent() {
                   </div>
                 ))}
 
-                {/* By category */}
+                {/* By task type */}
                 {categoryBreakdown.length > 0 && (
                   <>
                     <div className="px-7 py-4 border-b border-chalk">
-                      <h2 className="font-serif text-[22px] text-char">By category</h2>
+                      <h2 className="font-serif text-[22px] text-char">By task type</h2>
                     </div>
                     {categoryBreakdown.map((cat, i) => (
                       <div
@@ -686,12 +800,56 @@ function ReportsContent() {
                   </>
                 )}
 
-                {/* Export */}
-                <div className="px-7 py-7 flex flex-col gap-4">
-                  <div>
-                    <h2 className="font-serif text-[22px] text-char mb-1">Export</h2>
-                  </div>
+              </>
+            ) : (
+              <div className="px-7 py-16 text-center">
+                <p className="font-serif text-[22px] text-plum mb-2">
+                  No data yet
+                </p>
+                <p className="font-sans text-[13px] text-quill leading-relaxed mb-8 max-w-[280px] mx-auto">
+                  Once you start logging hours, your progress benchmarks
+                  and category breakdown will appear here.
+                </p>
+                <div className="flex flex-col gap-3 max-w-[240px] mx-auto">
+                  <Link
+                    href="/timer"
+                    className="inline-block min-h-12 px-6 py-3.5 rounded-md text-[15px] font-medium bg-plum text-cream hover:bg-plum-deep transition-colors text-center"
+                  >
+                    Start tracking
+                  </Link>
+                  <Link
+                    href="/settings/tax"
+                    className="inline-block min-h-12 px-6 py-3.5 rounded-md text-[15px] font-medium bg-cream text-quill border border-chalk hover:border-stone transition-colors text-center"
+                  >
+                    Set your tax goal
+                  </Link>
+                </div>
+              </div>
+            )}
+          </>
+        )}
 
+        {/* ── Reports (export) tab ────────────────────────────── */}
+        {activeTab === "export" && (
+          <>
+            {hasReportData ? (
+              <>
+                <PropertyFilter
+                  properties={properties}
+                  allTags={allTags}
+                  activeTag={activeTag}
+                  activeProp={activeProp}
+                  onTagChange={(tag) => {
+                    setActiveTag(tag);
+                    setActiveProp("All properties");
+                  }}
+                  onPropChange={setActiveProp}
+                  cohostName={cohostLinked ? cohostName : null}
+                  showCombined={showCombined}
+                  onToggleCombined={cohostLinked ? () => setShowCombined(!showCombined) : undefined}
+                />
+
+                <div className="px-7 py-7 flex flex-col gap-4">
                   {/* Year selector for PDF */}
                   {(() => {
                     const allYears = Array.from(
@@ -842,23 +1000,90 @@ function ReportsContent() {
                   No data yet
                 </p>
                 <p className="font-sans text-[13px] text-quill leading-relaxed mb-8 max-w-[280px] mx-auto">
-                  Once you start logging hours, your progress benchmarks
-                  and category breakdown will appear here.
+                  Start logging hours to generate tax reports and export your data.
                 </p>
-                <div className="flex flex-col gap-3 max-w-[240px] mx-auto">
-                  <Link
-                    href="/timer"
-                    className="inline-block min-h-12 px-6 py-3.5 rounded-md text-[15px] font-medium bg-plum text-cream hover:bg-plum-deep transition-colors text-center"
-                  >
-                    Start tracking
-                  </Link>
-                  <Link
-                    href="/settings/tax"
-                    className="inline-block min-h-12 px-6 py-3.5 rounded-md text-[15px] font-medium bg-cream text-quill border border-chalk hover:border-stone transition-colors text-center"
-                  >
-                    Set your tax goal
-                  </Link>
-                </div>
+                <Link
+                  href="/timer"
+                  className="inline-block min-h-12 px-6 py-3.5 rounded-md text-[15px] font-medium bg-plum text-cream hover:bg-plum-deep transition-colors text-center"
+                >
+                  Start tracking
+                </Link>
+              </div>
+            )}
+          </>
+        )}
+
+        {/* ── Team tab ───────────────────────────────────────── */}
+        {activeTab === "team" && (
+          <>
+            {teamMembers.length > 0 ? (
+              <>
+                {/* Hero stat */}
+                <section className="px-7 py-8 border-b border-chalk">
+                  <p className="font-mono text-[10px] uppercase tracking-[1.5px] text-slate font-medium">
+                    Team total &middot; {new Date().getFullYear()}
+                  </p>
+                  <div className="mt-2 flex items-baseline gap-2">
+                    <span className="font-serif text-[88px] text-plum tabular-nums tracking-[-5px] leading-none">
+                      {teamMembers.reduce((s, m) => s + m.hours, 0).toFixed(1)}
+                    </span>
+                    <span className="font-serif text-[26px] italic text-quill">hours</span>
+                  </div>
+                  <p className="mt-3 font-sans text-[13px] text-slate">
+                    {teamMembers.length} {teamMembers.length === 1 ? "person" : "people"}
+                  </p>
+                </section>
+
+                {/* Member list */}
+                {(() => {
+                  const maxHours = Math.max(...teamMembers.map((m) => m.hours), 1);
+                  return teamMembers
+                    .sort((a, b) => b.hours - a.hours)
+                    .map((member, i) => (
+                      <div
+                        key={member.name + member.role}
+                        className="px-7 py-4 border-b border-chalk"
+                      >
+                        <div className="flex items-center justify-between mb-2">
+                          <div className="flex items-center gap-2 min-w-0">
+                            <span className="font-serif text-[15px] font-medium text-char truncate">
+                              {member.name}{member.isYou ? " (you)" : ""}
+                            </span>
+                            <span className="shrink-0 px-2 py-0.5 rounded-full font-mono text-[9px] uppercase tracking-[1px] font-medium bg-vellum text-quill">
+                              {ROLE_DISPLAY[member.role] || member.role}
+                            </span>
+                          </div>
+                          <div className="flex items-baseline gap-0.5 shrink-0 ml-3">
+                            <span className="font-serif text-[18px] text-plum tabular-nums">
+                              {member.hours.toFixed(1)}
+                            </span>
+                            <span className="font-serif text-[13px] italic text-quill">h</span>
+                          </div>
+                        </div>
+                        <div className="h-[3px] rounded-full bg-bone">
+                          <div
+                            className={`h-full rounded-full ${CATEGORY_COLORS[i % CATEGORY_COLORS.length]}`}
+                            style={{ width: `${(member.hours / maxHours) * 100}%` }}
+                          />
+                        </div>
+                      </div>
+                    ));
+                })()}
+              </>
+            ) : (
+              <div className="px-7 py-16 text-center">
+                <p className="font-serif text-[22px] text-plum mb-2">
+                  No team members yet
+                </p>
+                <p className="font-sans text-[13px] text-quill leading-relaxed mb-8 max-w-[280px] mx-auto">
+                  Invite your spouse, managers, or helpers to track hours together.
+                </p>
+                <Link
+                  href="/settings/team"
+                  className="inline-block min-h-12 px-6 py-3.5 rounded-md text-[15px] font-medium bg-plum text-cream hover:bg-plum-deep transition-colors text-center"
+                >
+                  Manage team
+                </Link>
               </div>
             )}
           </>
