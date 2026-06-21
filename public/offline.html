@@ -1,0 +1,48 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover" />
+    <meta name="theme-color" content="#4A148C" />
+    <title>Offline — Host Hours</title>
+    <style>
+      :root { color-scheme: light; }
+      * { box-sizing: border-box; margin: 0; }
+      body {
+        min-height: 100dvh;
+        display: flex;
+        align-items: center;
+        justify-content: center;
+        background: #f9f6f0;
+        color: #2d2a28;
+        font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", system-ui, sans-serif;
+        padding: 24px;
+      }
+      .card { max-width: 360px; text-align: center; }
+      .mark {
+        width: 56px; height: 56px; margin: 0 auto 20px;
+        border-radius: 14px; background: #4a148c; color: #f9f6f0;
+        display: flex; align-items: center; justify-content: center;
+        font-weight: 700; font-size: 22px;
+      }
+      h1 {
+        font-family: Georgia, "Times New Roman", serif;
+        font-weight: 400; font-size: 30px; color: #4a148c; margin-bottom: 10px;
+      }
+      p { font-size: 15px; color: #6b6560; line-height: 1.5; margin-bottom: 24px; }
+      button {
+        min-height: 48px; padding: 0 24px; border: 0; border-radius: 8px;
+        background: #4a148c; color: #f9f6f0; font-size: 15px; font-weight: 500; cursor: pointer;
+      }
+      button:active { opacity: 0.9; }
+    </style>
+  </head>
+  <body>
+    <div class="card">
+      <div class="mark">HH</div>
+      <h1>You&rsquo;re offline.</h1>
+      <p>Host Hours needs a connection to load your hours. Check your network and try again.</p>
+      <button type="button" onclick="location.reload()">Try again</button>
+    </div>
+  </body>
+</html>
