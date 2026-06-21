@@ -5,6 +5,7 @@ import { useEffect, useState } from "react";
 import { useRouter } from "next/navigation";
 import { Dock } from "@/components/dock";
 import { createClient } from "@/lib/supabase/client";
+import { getMyAutoTimer, updateMyAutoTimer } from "@/lib/actions/team";
 
 function Toggle({ defaultOn = false }: { defaultOn?: boolean }) {
   return (
@@ -104,6 +105,11 @@ export default function SettingsPage() {
   const [taxYear, setTaxYear] = useState(2026);
   const [targetTest, setTargetTest] = useState("500");
   const [goalHours, setGoalHours] = useState(500);
+  const [isTeamMember, setIsTeamMember] = useState(false);
+  const [teamRole, setTeamRole] = useState<string | null>(null);
+  const [autoTimer, setAutoTimer] = useState(false);
+  const [defaultTask, setDefaultTask] = useState("");
+  const [autoTimerStatus, setAutoTimerStatus] = useState<"saving" | "saved" | null>(null);
   const [loading, setLoading] = useState(true);
 
   useEffect(() => {
@@ -146,6 +152,32 @@ export default function SettingsPage() {
         .is("deleted_at", null);
 
       setPropertyCount(count ?? 0);
+
+      const { data: membership } = await supabase
+        .from("team_members")
+        .select("owner_id, role")
+        .eq("member_id", user.id)
+        .eq("status", "active")
+        .limit(1)
+        .maybeSingle();
+
+      if (membership) {
+        setIsTeamMember(true);
+        setTeamRole(membership.role);
+        const at = await getMyAutoTimer();
+        if (at.data) {
+          setAutoTimer(at.data.autoTimerEnabled);
+          setDefaultTask(at.data.defaultTask);
+        }
+        // Helpers/managers default to a 100-hour goal (no IRS target test).
+        if (
+          (membership.role === "employee" || membership.role === "manager") &&
+          (profile?.goal_hours ?? 500) === 500
+        ) {
+          setGoalHours(100);
+        }
+      }
+
       setLoading(false);
     }
     load();
@@ -159,6 +191,21 @@ export default function SettingsPage() {
 
   const plan = PLAN_INFO[tierId] || PLAN_INFO.free;
   const maxProps = tierId === "enterprise" ? null : tierId === "professional" ? 5 : 1;
+  // Helpers and managers don't have an IRS target test — only a goal.
+  const isStaff = isTeamMember && (teamRole === "employee" || teamRole === "manager");
+
+  async function saveAutoTimer(enabled: boolean, task: string) {
+    setAutoTimer(enabled);
+    setDefaultTask(task);
+    setAutoTimerStatus("saving");
+    const res = await updateMyAutoTimer(enabled, task);
+    if (res.error) {
+      setAutoTimerStatus(null);
+      return;
+    }
+    setAutoTimerStatus("saved");
+    setTimeout(() => setAutoTimerStatus((s) => (s === "saved" ? null : s)), 2000);
+  }
 
   if (loading) {
     return (
@@ -217,63 +264,67 @@ export default function SettingsPage() {
           </span>
         </div>
 
-        {/* Plan & billing */}
-        <SectionBar>Plan &amp; billing</SectionBar>
+        {/* Plan & billing (owner only) */}
+        {!isTeamMember && (
+          <>
+            <SectionBar>Plan &amp; billing</SectionBar>
 
-        {/* Current plan */}
-        <div className="mx-7 mt-4 p-6 border-[1.5px] border-plum rounded-md relative bg-cream">
-          <span className="absolute -top-2.5 left-5 bg-plum text-cream font-mono text-[9px] tracking-[1.5px] uppercase px-2.5 py-1 rounded-[999px] font-medium">
-            Current
-          </span>
-          <div className="flex justify-between items-baseline mb-1">
-            <div className="font-serif text-2xl font-medium text-plum tracking-[-0.5px]">
-              {plan.name}
-            </div>
-            <div className="font-serif text-[22px] font-medium text-char tracking-[-0.5px] tabular-nums">
-              {plan.price}
-              <span className="font-sans text-xs text-slate font-normal">
-                {tierId === "free" ? " forever" : "/mo"}
+            {/* Current plan */}
+            <div className="mx-7 mt-4 p-6 border-[1.5px] border-plum rounded-md relative bg-cream">
+              <span className="absolute -top-2.5 left-5 bg-plum text-cream font-mono text-[9px] tracking-[1.5px] uppercase px-2.5 py-1 rounded-[999px] font-medium">
+                Current
               </span>
+              <div className="flex justify-between items-baseline mb-1">
+                <div className="font-serif text-2xl font-medium text-plum tracking-[-0.5px]">
+                  {plan.name}
+                </div>
+                <div className="font-serif text-[22px] font-medium text-char tracking-[-0.5px] tabular-nums">
+                  {plan.price}
+                  <span className="font-sans text-xs text-slate font-normal">
+                    {tierId === "free" ? " forever" : "/mo"}
+                  </span>
+                </div>
+              </div>
+              <div className="font-serif italic text-[13px] text-quill mb-4">
+                {plan.tagline}
+              </div>
+              <ul className="mb-4">
+                {plan.features.map((f) => (
+                  <li
+                    key={f}
+                    className="text-[13px] text-quill py-1.5 pl-[18px] relative leading-relaxed"
+                  >
+                    <span className="absolute left-1 top-2 text-tangerine font-bold text-base leading-none">
+                      ·
+                    </span>
+                    {f}
+                  </li>
+                ))}
+              </ul>
+              {maxProps && (
+                <div className="font-mono text-[11px] tracking-[0.5px] text-success mb-1.5">
+                  <strong className="font-medium tabular-nums">{propertyCount} of {maxProps}</strong> properties in use
+                </div>
+              )}
+              {periodEnd && (
+                <div className="font-mono text-[10px] tracking-[1px] text-slate uppercase">
+                  Renews {new Date(periodEnd).toLocaleDateString("en-US", { month: "short", day: "numeric", year: "numeric" })}
+                </div>
+              )}
             </div>
-          </div>
-          <div className="font-serif italic text-[13px] text-quill mb-4">
-            {plan.tagline}
-          </div>
-          <ul className="mb-4">
-            {plan.features.map((f) => (
-              <li
-                key={f}
-                className="text-[13px] text-quill py-1.5 pl-[18px] relative leading-relaxed"
-              >
-                <span className="absolute left-1 top-2 text-tangerine font-bold text-base leading-none">
-                  ·
-                </span>
-                {f}
-              </li>
-            ))}
-          </ul>
-          {maxProps && (
-            <div className="font-mono text-[11px] tracking-[0.5px] text-success mb-1.5">
-              <strong className="font-medium tabular-nums">{propertyCount} of {maxProps}</strong> properties in use
-            </div>
-          )}
-          {periodEnd && (
-            <div className="font-mono text-[10px] tracking-[1px] text-slate uppercase">
-              Renews {new Date(periodEnd).toLocaleDateString("en-US", { month: "short", day: "numeric", year: "numeric" })}
-            </div>
-          )}
-        </div>
 
-        {/* Show upgrade options for non-enterprise users */}
-        {tierId !== "enterprise" && (
-          <div className="mx-7 mt-4 mb-6">
-            <Link
-              href="/settings/billing/plan"
-              className="block w-full min-h-12 px-5.5 py-3.5 rounded-md text-[15px] font-medium bg-plum text-cream hover:bg-plum-deep transition-colors text-center"
-            >
-              Change plan →
-            </Link>
-          </div>
+            {/* Show upgrade options for non-enterprise users */}
+            {tierId !== "enterprise" && (
+              <div className="mx-7 mt-4 mb-6">
+                <Link
+                  href="/settings/billing/plan"
+                  className="block w-full min-h-12 px-5.5 py-3.5 rounded-md text-[15px] font-medium bg-plum text-cream hover:bg-plum-deep transition-colors text-center"
+                >
+                  Change plan →
+                </Link>
+              </div>
+            )}
+          </>
         )}
 
         {/* Account */}
@@ -284,21 +335,125 @@ export default function SettingsPage() {
         <Link href="/settings/password">
           <SettingRow label="Change password" arrow />
         </Link>
-        <Link href="/settings/billing">
-          <SettingRow label="Subscription & billing" sub={`${plan.name} plan`} arrow />
-        </Link>
+        {!isTeamMember && (
+          <Link href="/settings/billing">
+            <SettingRow label="Subscription & billing" sub={`${plan.name} plan`} arrow />
+          </Link>
+        )}
 
-        {/* Tax settings */}
-        <SectionBar>Tax settings</SectionBar>
-        <Link href="/settings/tax">
-          <SettingRow label="Tax year" value={String(taxYear)} arrow />
-        </Link>
-        <Link href="/settings/tax">
-          <SettingRow label="Target test" value={targetTest === "substantially" ? "Substantially all" : `${targetTest} hours`} arrow />
-        </Link>
-        <Link href="/settings/tax">
-          <SettingRow label="Annual goal" value={`${goalHours} hours`} arrow />
-        </Link>
+        {/* Team — helpers can't manage team members, so hide the section for them. */}
+        {!(isTeamMember && teamRole === "employee") && (
+          <>
+            <SectionBar>Team</SectionBar>
+            <Link href="/settings/team">
+              <SettingRow label="Manage team" arrow />
+            </Link>
+          </>
+        )}
+
+        {/* Auto-timer — for members who go on-site at assigned properties */}
+        {isTeamMember && (
+          <>
+            <SectionBar>Auto-timer</SectionBar>
+            <div className="mx-7 mt-4 mb-6 p-5 border-[1.5px] border-chalk rounded-md bg-cream">
+              <div className="flex items-start justify-between gap-3">
+                <div className="min-w-0">
+                  <div className="font-serif text-[16px] font-medium text-char">
+                    Auto start/stop
+                  </div>
+                  <p className="text-[12px] text-slate leading-relaxed mt-0.5">
+                    Start the timer when you arrive at an assigned property and stop it when you leave.
+                  </p>
+                </div>
+                <button
+                  type="button"
+                  role="switch"
+                  aria-checked={autoTimer}
+                  onClick={() => saveAutoTimer(!autoTimer, defaultTask)}
+                  className={`shrink-0 w-10 h-6 rounded-full relative transition-colors ${
+                    autoTimer ? "bg-plum" : "bg-stone/40"
+                  }`}
+                >
+                  <span
+                    className={`absolute top-0.5 w-5 h-5 rounded-full bg-cream transition-all ${
+                      autoTimer ? "left-[18px]" : "left-0.5"
+                    }`}
+                  />
+                </button>
+              </div>
+
+              {autoTimer && (
+                <div className="mt-4">
+                  <label className="font-mono text-[9px] tracking-[1.5px] uppercase text-slate mb-1.5 block">
+                    Default task
+                  </label>
+                  <input
+                    type="text"
+                    value={defaultTask}
+                    onChange={(e) => setDefaultTask(e.target.value)}
+                    onBlur={() => saveAutoTimer(autoTimer, defaultTask)}
+                    placeholder="e.g. Cleaning"
+                    className="w-full min-h-11 px-4 py-3 border border-chalk rounded-md text-[15px] text-char bg-cream focus:outline-none focus:border-plum focus:ring-2 focus:ring-plum-mist placeholder:text-stone"
+                  />
+                  <p className="mt-1.5 text-[11px] text-slate">
+                    The task the auto-started timer logs.
+                  </p>
+                </div>
+              )}
+
+              <div className="h-4 mt-2">
+                {autoTimerStatus === "saving" && (
+                  <span className="text-[11px] text-slate">Saving…</span>
+                )}
+                {autoTimerStatus === "saved" && (
+                  <span className="text-[11px] text-success">Saved</span>
+                )}
+              </div>
+            </div>
+          </>
+        )}
+
+        {/* Target & Goal */}
+        <SectionBar>Target &amp; Goal</SectionBar>
+
+        <div className="mx-7 mt-4 mb-6 p-6 border-[1.5px] border-chalk rounded-md bg-cream">
+          <div className={`grid ${isStaff ? "grid-cols-2" : "grid-cols-3"} gap-4 mb-5`}>
+            <div>
+              <div className="font-mono text-[9px] tracking-[1.5px] uppercase text-slate mb-1">
+                Tax year
+              </div>
+              <div className="font-serif text-[20px] font-medium text-char tracking-[-0.3px]">
+                {taxYear}
+              </div>
+            </div>
+            <div>
+              <div className="font-mono text-[9px] tracking-[1.5px] uppercase text-slate mb-1">
+                Goal
+              </div>
+              <div className="font-serif text-[20px] font-medium text-char tracking-[-0.3px]">
+                {goalHours}
+                <span className="font-sans text-[12px] text-slate font-normal"> hrs</span>
+              </div>
+            </div>
+            {!isStaff && (
+              <div>
+                <div className="font-mono text-[9px] tracking-[1.5px] uppercase text-slate mb-1">
+                  Target
+                </div>
+                <div className="font-serif text-[15px] font-medium text-char tracking-[-0.2px] leading-snug">
+                  {targetTest === "substantially" ? "Subst. all" : `${targetTest} hrs`}
+                </div>
+              </div>
+            )}
+          </div>
+
+          <Link
+            href="/settings/tax"
+            className="block w-full min-h-12 py-3 rounded-md text-center font-mono text-[11px] tracking-[1.5px] uppercase text-plum border border-plum hover:bg-plum hover:text-cream active:scale-[0.98] transition-all"
+          >
+            Edit settings
+          </Link>
+        </div>
 
         {/* Support */}
         <SectionBar>Support</SectionBar>

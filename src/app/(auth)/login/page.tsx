@@ -2,21 +2,37 @@
 
 import Link from "next/link";
 import { TopStrip } from "@/components/top-strip";
-import { useState } from "react";
-import { useRouter } from "next/navigation";
+import { Suspense, useState } from "react";
+import { useRouter, useSearchParams } from "next/navigation";
 import { createClient } from "@/lib/supabase/client";
 
 export default function LoginPage() {
+  return (
+    <Suspense>
+      <LoginInner />
+    </Suspense>
+  );
+}
+
+function LoginInner() {
   const router = useRouter();
+  const searchParams = useSearchParams();
+  const next = searchParams.get("next");
+  const invitedEmail = searchParams.get("email");
+  const signupHref = `/signup?${new URLSearchParams({
+    ...(next ? { next } : {}),
+    ...(invitedEmail ? { email: invitedEmail } : {}),
+  }).toString()}`;
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
 
   async function handleGoogleSignIn() {
     const supabase = createClient();
+    const callbackUrl = `${window.location.origin}/auth/callback${next ? `?next=${encodeURIComponent(next)}` : ""}`;
     await supabase.auth.signInWithOAuth({
       provider: "google",
       options: {
-        redirectTo: `${window.location.origin}/auth/callback`,
+        redirectTo: callbackUrl,
       },
     });
   }
@@ -42,7 +58,7 @@ export default function LoginPage() {
       return;
     }
 
-    router.push("/dashboard");
+    router.push(next?.startsWith("/") ? next : "/dashboard");
   }
 
   return (
@@ -77,6 +93,7 @@ export default function LoginPage() {
               type="email"
               name="email"
               required
+              defaultValue={invitedEmail ?? undefined}
               placeholder="you@example.com"
               className="w-full min-h-12 px-4 py-3.5 border border-chalk rounded-md text-[15px] text-char bg-cream focus:outline-none focus:border-plum focus:ring-4 focus:ring-plum-mist placeholder:text-stone transition-colors"
             />
@@ -140,7 +157,7 @@ export default function LoginPage() {
         <p className="text-center text-[13px] text-quill pt-8 pb-2">
           New here?{" "}
           <Link
-            href="/signup"
+            href={signupHref}
             className="text-plum font-medium underline decoration-tangerine underline-offset-[3px] decoration-[1.5px]"
           >
             Create an account

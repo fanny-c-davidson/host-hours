@@ -2,12 +2,36 @@
 
 import Link from "next/link";
 import { TopStrip } from "@/components/top-strip";
-import { useState } from "react";
-import { useRouter } from "next/navigation";
+import { Suspense, useState } from "react";
+import { useRouter, useSearchParams } from "next/navigation";
 import { createClient } from "@/lib/supabase/client";
+import { signUpFromInvitation } from "@/lib/actions/team";
 
 export default function SignupPage() {
+  return (
+    <Suspense>
+      <SignupInner />
+    </Suspense>
+  );
+}
+
+function SignupInner() {
   const router = useRouter();
+  const searchParams = useSearchParams();
+  const next = searchParams.get("next");
+  const invitedEmail = searchParams.get("email");
+  const invitedFirstName = searchParams.get("firstName");
+  const invitedLastName = searchParams.get("lastName");
+  const loginHref = `/login?${new URLSearchParams({
+    ...(next ? { next } : {}),
+    ...(invitedEmail ? { email: invitedEmail } : {}),
+  }).toString()}`;
+  // When arriving from an invite, `next` is /invite?token=... — pull the token so
+  // we can create the account pre-confirmed (no verification email needed).
+  const inviteToken = next
+    ? new URLSearchParams(next.split("?")[1] ?? "").get("token")
+    : null;
+  const fromInvitation = !!invitedEmail && !!inviteToken;
   const [agreed, setAgreed] = useState(false);
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
@@ -16,10 +40,11 @@ export default function SignupPage() {
 
   async function handleGoogleSignIn() {
     const supabase = createClient();
+    const callbackUrl = `${window.location.origin}/auth/callback${next ? `?next=${encodeURIComponent(next)}` : ""}`;
     await supabase.auth.signInWithOAuth({
       provider: "google",
       options: {
-        redirectTo: `${window.location.origin}/auth/callback`,
+        redirectTo: callbackUrl,
       },
     });
   }
@@ -35,17 +60,47 @@ export default function SignupPage() {
 
     setLoading(true);
     const form = new FormData(e.currentTarget);
-    const name = form.get("name") as string;
+    const firstName = (form.get("first_name") as string)?.trim() ?? "";
+    const lastName = (form.get("last_name") as string)?.trim() ?? "";
+    const fullName = `${firstName} ${lastName}`.trim();
     const email = form.get("email") as string;
     const password = form.get("password") as string;
 
     const supabase = createClient();
+
+    // Invitation signup: create the account pre-confirmed (the token proves inbox
+    // ownership), sign in, and continue straight to accepting the invite.
+    if (fromInvitation) {
+      const result = await signUpFromInvitation({
+        token: inviteToken!,
+        firstName,
+        lastName,
+        password,
+      });
+      if (result.error) {
+        setError(result.error);
+        setLoading(false);
+        return;
+      }
+      const { error: signInError } = await supabase.auth.signInWithPassword({
+        email: invitedEmail!,
+        password,
+      });
+      if (signInError) {
+        setError(signInError.message);
+        setLoading(false);
+        return;
+      }
+      router.push(next!);
+      return;
+    }
+
     const { error: authError } = await supabase.auth.signUp({
       email,
       password,
       options: {
-        data: { full_name: name },
-        emailRedirectTo: `${window.location.origin}/auth/callback`,
+        data: { full_name: fullName },
+        emailRedirectTo: `${window.location.origin}/auth/callback${next ? `?next=${encodeURIComponent(next)}` : ""}`,
       },
     });
 
@@ -116,17 +171,33 @@ export default function SignupPage() {
         )}
 
         <form onSubmit={handleSubmit} className="flex flex-col gap-5">
-          <div>
-            <label className="font-mono text-[10px] tracking-[1.5px] uppercase text-quill font-medium mb-2 block">
-              Full name
-            </label>
-            <input
-              type="text"
-              name="name"
-              required
-              placeholder="Jane Doe"
-              className="w-full min-h-12 px-4 py-3.5 border border-chalk rounded-md text-[15px] text-char bg-cream focus:outline-none focus:border-plum focus:ring-4 focus:ring-plum-mist placeholder:text-stone transition-colors"
-            />
+          <div className="grid grid-cols-2 gap-4">
+            <div>
+              <label className="font-mono text-[10px] tracking-[1.5px] uppercase text-quill font-medium mb-2 block">
+                First name
+              </label>
+              <input
+                type="text"
+                name="first_name"
+                required
+                defaultValue={invitedFirstName ?? undefined}
+                placeholder="Jane"
+                className="w-full min-h-12 px-4 py-3.5 border border-chalk rounded-md text-[15px] text-char bg-cream focus:outline-none focus:border-plum focus:ring-4 focus:ring-plum-mist placeholder:text-stone transition-colors"
+              />
+            </div>
+            <div>
+              <label className="font-mono text-[10px] tracking-[1.5px] uppercase text-quill font-medium mb-2 block">
+                Last name
+              </label>
+              <input
+                type="text"
+                name="last_name"
+                required
+                defaultValue={invitedLastName ?? undefined}
+                placeholder="Doe"
+                className="w-full min-h-12 px-4 py-3.5 border border-chalk rounded-md text-[15px] text-char bg-cream focus:outline-none focus:border-plum focus:ring-4 focus:ring-plum-mist placeholder:text-stone transition-colors"
+              />
+            </div>
           </div>
 
           <div>
@@ -137,9 +208,16 @@ export default function SignupPage() {
               type="email"
               name="email"
               required
+              defaultValue={invitedEmail ?? undefined}
+              readOnly={!!invitedEmail}
               placeholder="you@example.com"
-              className="w-full min-h-12 px-4 py-3.5 border border-chalk rounded-md text-[15px] text-char bg-cream focus:outline-none focus:border-plum focus:ring-4 focus:ring-plum-mist placeholder:text-stone transition-colors"
+              className={`w-full min-h-12 px-4 py-3.5 border border-chalk rounded-md text-[15px] focus:outline-none focus:border-plum focus:ring-4 focus:ring-plum-mist placeholder:text-stone transition-colors ${invitedEmail ? "bg-bone text-quill cursor-not-allowed" : "bg-cream text-char"}`}
             />
+            {invitedEmail && (
+              <p className="text-xs text-slate mt-1.5">
+                Use this address to accept your team invitation.
+              </p>
+            )}
           </div>
 
           <div>
@@ -220,7 +298,7 @@ export default function SignupPage() {
         <p className="text-center text-[13px] text-quill pt-8 pb-2">
           Already a member?{" "}
           <Link
-            href="/login"
+            href={loginHref}
             className="text-plum font-medium underline decoration-tangerine underline-offset-[3px] decoration-[1.5px]"
           >
             Sign in
