@@ -1,0 +1,42 @@
+name: E2E Smoke (production)
+
+# Runs the read-only public Playwright suite against the production site
+# whenever Vercel reports a successful Production deployment, and on demand.
+on:
+  deployment_status:
+  workflow_dispatch:
+
+jobs:
+  smoke:
+    # Only run for successful PRODUCTION deployments (or manual triggers).
+    if: >
+      github.event_name == 'workflow_dispatch' ||
+      (github.event.deployment_status.state == 'success' &&
+       github.event.deployment_status.environment == 'Production')
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 20
+          cache: npm
+
+      - run: npm ci
+
+      - run: npx playwright install --with-deps chromium
+
+      - name: Run public smoke tests
+        env:
+          # Use the just-deployed URL when available, else the stable prod URL.
+          BASE_URL: ${{ github.event.deployment_status.environment_url || 'https://host-hours.vercel.app' }}
+        run: npx playwright test --project=public
+
+      - name: Upload report
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: playwright-report
+          path: playwright-report/
+          retention-days: 7
