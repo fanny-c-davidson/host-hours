@@ -29,18 +29,27 @@ export default function AppLayout() {
     >
       <Tabs.Screen
         name="dashboard"
-        options={{
-          title: "Home",
-          tabBarIcon: ({ color, size }) => <Ionicons name="home-outline" color={color} size={size} />,
-        }}
+        options={{ title: "Home", tabBarIcon: ({ color, size }) => <Ionicons name="home-outline" color={color} size={size} /> }}
       />
       <Tabs.Screen
         name="timer"
-        options={{
-          title: "Timer",
-          tabBarIcon: ({ color, size }) => <Ionicons name="time-outline" color={color} size={size} />,
-        }}
+        options={{ title: "Timer", tabBarIcon: ({ color, size }) => <Ionicons name="time-outline" color={color} size={size} /> }}
       />
+      <Tabs.Screen
+        name="log"
+        options={{ title: "Log", tabBarIcon: ({ color, size }) => <Ionicons name="add-circle-outline" color={color} size={size} /> }}
+      />
+      <Tabs.Screen
+        name="reports"
+        options={{ title: "Reports", tabBarIcon: ({ color, size }) => <Ionicons name="bar-chart-outline" color={color} size={size} /> }}
+      />
+      <Tabs.Screen
+        name="settings"
+        options={{ title: "Settings", tabBarIcon: ({ color, size }) => <Ionicons name="person-outline" color={color} size={size} /> }}
+      />
+      {/* Reached from Settings, not shown in the tab bar */}
+      <Tabs.Screen name="properties" options={{ href: null }} />
+      <Tabs.Screen name="property-new" options={{ href: null }} />
     </Tabs>
   );
 }

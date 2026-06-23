@@ -1,5 +1,10 @@
 import { supabase } from "./supabase";
 
+export type TeamRole = "owner" | "spouse" | "manager" | "employee";
+
+export const canWriteProperties = (role: TeamRole) => role === "owner" || role === "spouse";
+export const isStaff = (role: TeamRole) => role === "manager" || role === "employee";
+
 export type Property = { id: string; name: string; color: string };
 
 export type Profile = {
@@ -102,5 +107,110 @@ export async function startTimer(
 /** Moves an active timer into time_logs via the server-side RPC. */
 export async function stopTimer(timerId: string, userId: string): Promise<{ error: string | null }> {
   const { error } = await supabase.rpc("stop_timer", { p_timer_id: timerId, p_user_id: userId });
+  return { error: error?.message ?? null };
+}
+
+/** The caller's role on a team they belong to; "owner" if they're not a member. */
+export async function getMyRole(userId: string): Promise<TeamRole> {
+  const { data } = await supabase
+    .from("team_members")
+    .select("role")
+    .eq("member_id", userId)
+    .eq("status", "active")
+    .limit(1)
+    .maybeSingle();
+  return (data?.role as TeamRole) ?? "owner";
+}
+
+/** Manual time entry: logs `hours` worth of time ending now. */
+export async function createLog(
+  userId: string,
+  propertyId: string,
+  title: string,
+  hours: number,
+): Promise<{ error: string | null }> {
+  const end = new Date();
+  const start = new Date(end.getTime() - hours * 3600 * 1000);
+  const { error } = await supabase.from("time_logs").insert({
+    user_id: userId,
+    property_id: propertyId,
+    title: title.trim() || "Untitled",
+    started_at: start.toISOString(),
+    ended_at: end.toISOString(),
+    source: "manual",
+  });
+  return { error: error?.message ?? null };
+}
+
+export async function getAllLogs(userId: string, limit = 100): Promise<LogEntry[]> {
+  const { data } = await supabase
+    .from("time_logs")
+    .select("id, title, started_at, duration_secs, property_id, property:properties(name)")
+    .eq("user_id", userId)
+    .is("deleted_at", null)
+    .order("started_at", { ascending: false })
+    .limit(limit);
+  return (data ?? []).map((r: any) => ({
+    id: r.id,
+    title: r.title,
+    started_at: r.started_at,
+    duration_secs: r.duration_secs,
+    property_id: r.property_id,
+    propertyName: r.property?.name ?? null,
+  }));
+}
+
+export type TeamMember = {
+  member_id: string | null;
+  name: string;
+  role: TeamRole;
+  email: string;
+};
+
+export async function getTeamMembers(ownerId: string): Promise<TeamMember[]> {
+  const { data } = await supabase
+    .from("team_members")
+    .select("member_id, role, email, first_name, last_name")
+    .eq("owner_id", ownerId)
+    .eq("status", "active");
+  return (data ?? []).map((r: any) => ({
+    member_id: r.member_id,
+    role: r.role,
+    email: r.email,
+    name: [r.first_name, r.last_name].filter(Boolean).join(" ") || r.email,
+  }));
+}
+
+export type AutoTimer = { enabled: boolean; defaultTask: string };
+
+export async function getMyAutoTimer(userId: string, role: TeamRole): Promise<AutoTimer> {
+  const table = role === "owner" ? "profiles" : "team_members";
+  const match = role === "owner" ? { id: userId } : { member_id: userId, status: "active" };
+  const { data } = await supabase
+    .from(table)
+    .select("auto_timer_enabled, default_task")
+    .match(match)
+    .limit(1)
+    .maybeSingle();
+  return { enabled: !!data?.auto_timer_enabled, defaultTask: data?.default_task ?? "" };
+}
+
+export async function setMyAutoTimer(enabled: boolean, defaultTask: string): Promise<{ error: string | null }> {
+  const { error } = await supabase.rpc("set_my_auto_timer", { p_enabled: enabled, p_task: defaultTask });
+  return { error: error?.message ?? null };
+}
+
+export async function createProperty(
+  userId: string,
+  name: string,
+  address: string,
+  color: string,
+): Promise<{ error: string | null }> {
+  const { error } = await supabase.from("properties").insert({
+    user_id: userId,
+    name: name.trim(),
+    address: address.trim() || null,
+    color,
+  });
   return { error: error?.message ?? null };
 }
