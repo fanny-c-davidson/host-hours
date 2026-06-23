@@ -8,6 +8,7 @@ import {
   Fraunces_500Medium,
 } from "@expo-google-fonts/fraunces";
 import { AuthProvider } from "@/lib/auth";
+import "@/lib/geofence"; // registers the background geofencing task at startup
 import { colors } from "@/theme/tokens";
 
 SplashScreen.preventAutoHideAsync();

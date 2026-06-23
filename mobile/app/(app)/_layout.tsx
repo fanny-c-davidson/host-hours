@@ -1,13 +1,25 @@
+import { useEffect } from "react";
 import { Redirect, Tabs } from "expo-router";
 import { ActivityIndicator, View } from "react-native";
 import { Ionicons } from "@expo/vector-icons";
 import { useAuth } from "@/lib/auth";
 import { LockGate } from "@/components/lock-gate";
+import { registerForPush } from "@/lib/push";
+import { syncGeofences } from "@/lib/geofence";
 import { colors, fonts } from "@/theme/tokens";
 
 // Protected tab navigator (mirrors the web dock).
 export default function AppLayout() {
   const { session, loading } = useAuth();
+
+  // Once signed in: register the push token and reconcile geofences (no-op on
+  // web / if auto-timer is off or permission is denied).
+  useEffect(() => {
+    const uid = session?.user.id;
+    if (!uid) return;
+    registerForPush(uid).catch(() => {});
+    syncGeofences(uid).catch(() => {});
+  }, [session]);
 
   if (loading) {
     return (

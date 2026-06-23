@@ -80,6 +80,35 @@ export async function getRecentLogs(userId: string, limit = 5): Promise<LogEntry
   }));
 }
 
+export type GeoProperty = { id: string; latitude: number; longitude: number; radius: number };
+
+/** Properties with coordinates, for geofencing. */
+export async function getGeoProperties(): Promise<GeoProperty[]> {
+  const { data } = await supabase
+    .from("properties")
+    .select("id, latitude, longitude, geo_radius_meters")
+    .is("deleted_at", null)
+    .not("latitude", "is", null)
+    .not("longitude", "is", null);
+  return (data ?? []).map((p: any) => ({
+    id: p.id,
+    latitude: p.latitude,
+    longitude: p.longitude,
+    radius: p.geo_radius_meters ?? 200,
+  }));
+}
+
+export async function getActiveTimerByProperty(userId: string, propertyId: string): Promise<string | null> {
+  const { data } = await supabase
+    .from("active_timers")
+    .select("id")
+    .eq("user_id", userId)
+    .eq("property_id", propertyId)
+    .limit(1)
+    .maybeSingle();
+  return data?.id ?? null;
+}
+
 export async function getActiveTimer(userId: string): Promise<ActiveTimer | null> {
   const { data } = await supabase
     .from("active_timers")

@@ -12,11 +12,19 @@
       "supportsTablet": true,
       "bundleIdentifier": "com.hosthours.app",
       "infoPlist": {
-        "ITSAppUsesNonExemptEncryption": false
+        "ITSAppUsesNonExemptEncryption": false,
+        "UIBackgroundModes": ["location", "fetch", "remote-notification"]
       }
     },
     "android": {
-      "package": "com.hosthours.app"
+      "package": "com.hosthours.app",
+      "permissions": [
+        "ACCESS_COARSE_LOCATION",
+        "ACCESS_FINE_LOCATION",
+        "ACCESS_BACKGROUND_LOCATION",
+        "FOREGROUND_SERVICE",
+        "FOREGROUND_SERVICE_LOCATION"
+      ]
     },
     "plugins": [
       "expo-router",
@@ -32,7 +40,18 @@
           "photosPermission": "Host Hours needs photo access to attach receipts.",
           "cameraPermission": "Host Hours needs the camera to capture receipts."
         }
-      ]
+      ],
+      [
+        "expo-location",
+        {
+          "locationAlwaysAndWhenInUsePermission": "Host Hours uses your location to auto start and stop the timer at your properties.",
+          "locationWhenInUsePermission": "Host Hours uses your location to auto start and stop the timer at your properties.",
+          "isAndroidBackgroundLocationEnabled": true,
+          "isAndroidForegroundServiceEnabled": true
+        }
+      ],
+      "expo-notifications",
+      "expo-task-manager"
     ],
     "experiments": {
       "typedRoutes": true

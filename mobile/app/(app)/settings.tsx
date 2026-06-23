@@ -15,6 +15,7 @@ import {
 } from "@/lib/db";
 import { Card, MetricLabel, SectionLabel } from "@/components/app-ui";
 import { authenticate, isBiometricAvailable, isBiometricEnabled, setBiometricEnabled } from "@/lib/biometric";
+import { syncGeofences } from "@/lib/geofence";
 import { colors, fonts, radius, space } from "@/theme/tokens";
 
 const ROLE_LABEL: Record<TeamRole, string> = {
@@ -76,6 +77,8 @@ export default function SettingsScreen() {
     setDefaultTask(task);
     setSavingAuto(true);
     await setMyAutoTimer(enabled, task);
+    // Reconcile geofences (requests background-location permission when enabling).
+    if (uid) await syncGeofences(uid).catch(() => {});
     setSavingAuto(false);
   }
 
