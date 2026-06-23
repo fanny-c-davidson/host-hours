@@ -38,6 +38,24 @@ export default function NewPropertyPage() {
     loadTags();
   }, []);
 
+  // Only owners and spouses may create properties — bounce others out.
+  useEffect(() => {
+    async function guard() {
+      const supabase = createClient();
+      const { data: { user } } = await supabase.auth.getUser();
+      if (!user) return;
+      const { data: membership } = await supabase
+        .from("team_members")
+        .select("role")
+        .eq("member_id", user.id)
+        .eq("status", "active")
+        .limit(1)
+        .maybeSingle();
+      if (membership && membership.role !== "spouse") router.replace("/properties");
+    }
+    guard();
+  }, [router]);
+
   const activeColor = customColor || selectedColor;
 
   function handlePresetClick(color: string) {

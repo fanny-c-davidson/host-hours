@@ -164,11 +164,6 @@ export default function SettingsPage() {
       if (membership) {
         setIsTeamMember(true);
         setTeamRole(membership.role);
-        const at = await getMyAutoTimer();
-        if (at.data) {
-          setAutoTimer(at.data.autoTimerEnabled);
-          setDefaultTask(at.data.defaultTask);
-        }
         // Helpers/managers default to a 100-hour goal (no IRS target test).
         if (
           (membership.role === "employee" || membership.role === "manager") &&
@@ -176,6 +171,14 @@ export default function SettingsPage() {
         ) {
           setGoalHours(100);
         }
+      }
+
+      // Auto-timer applies to everyone — owners store it on their profile,
+      // team members on their membership row.
+      const at = await getMyAutoTimer();
+      if (at.data) {
+        setAutoTimer(at.data.autoTimerEnabled);
+        setDefaultTask(at.data.defaultTask);
       }
 
       setLoading(false);
@@ -351,8 +354,8 @@ export default function SettingsPage() {
           </>
         )}
 
-        {/* Auto-timer — for members who go on-site at assigned properties */}
-        {isTeamMember && (
+        {/* Auto-timer — available to everyone (owners + team members) */}
+        {(
           <>
             <SectionBar>Auto-timer</SectionBar>
             <div className="mx-7 mt-4 mb-6 p-5 border-[1.5px] border-chalk rounded-md bg-cream">

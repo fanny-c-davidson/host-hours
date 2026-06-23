@@ -59,15 +59,24 @@ npm run test:e2e:report
 | `timer.app.spec.ts`        | app     | yes  | opt-in | timer page; start timer (`E2E_WRITE=1`)          |
 | `reports.app.spec.ts`      | app     | yes  | no     | My Hours / Activity / Team tabs, tax-year selector |
 | `settings.app.spec.ts`     | app     | yes  | no     | account section, target & goal, sign-out, edit profile |
-| `roles-owner.app.spec.ts`  | app     | yes  | no     | owner settings layout (billing + team + target, no auto-timer) |
-| `roles-manager.app.spec.ts`| app     | mgr  | no     | manager layout (team + auto-timer, no billing/target) |
-| `roles-helper.app.spec.ts` | app     | help | no     | helper layout (auto-timer only; no team mgmt/billing/target) |
-| `roles-spouse.app.spec.ts` | app     | spse | no     | spouse layout (team + auto-timer + target, no billing) |
+| `roles-owner.app.spec.ts`  | app     | yes  | no     | owner: full access (billing, team, target, props, team reports) |
+| `roles-manager.app.spec.ts`| app     | mgr  | no     | manager: team + auto-timer; no billing/target/props/team reports |
+| `roles-helper.app.spec.ts` | app     | help | no     | helper: auto-timer only; no team/props/target/team reports |
+| `roles-spouse.app.spec.ts` | app     | spse | no     | spouse: like owner minus billing |
 
-The four `roles-*` specs assert the role-distinct **Settings** layout (a unique
-combination of Plan&billing / Manage team / Auto-timer / Target per role — see
-`utils.ts`). Each non-owner role spec **skips** unless its `E2E_<ROLE>_*` creds
-are set.
+The four `roles-*` specs assert each role's permission surface across
+**Settings**, **Properties**, and **Reports** (see the matrix in `utils.ts`):
+
+| capability | owner | spouse | manager | helper |
+|---|:---:|:---:|:---:|:---:|
+| Plan & billing | ✓ | ✗ | ✗ | ✗ |
+| Manage team | ✓ | ✓ | ✓ | ✗ |
+| Auto-timer | ✓ | ✓ | ✓ | ✓ |
+| IRS target test | ✓ | ✓ | ✗ | ✗ |
+| Manage properties | ✓ | ✓ | ✗ | ✗ |
+| Team hours/reports | ✓ | ✓ | ✗ | ✗ |
+
+Each non-owner role spec **skips** unless its `E2E_<ROLE>_*` creds are set.
 
 ## Notes
 

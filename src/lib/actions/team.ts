@@ -909,14 +909,15 @@ export type AutoTimerSettings = {
   defaultTask: string;
 };
 
-// A team member's own auto-timer settings (the value the native geofence engine
-// will read). Read/write the caller's own membership rows only.
+// A user's own auto-timer settings (the value the native geofence engine will
+// read). Stored on team_members for members; on profiles for owners (who have
+// no membership row). Read/write the caller's own rows only.
 export async function getMyAutoTimer(): Promise<ActionResult<AutoTimerSettings | null>> {
   const user = await getAuthenticatedUser();
   if (!user) return UNAUTHORIZED;
 
   const db = createServiceClient();
-  const { data } = await db
+  const { data: membership } = await db
     .from("team_members")
     .select("auto_timer_enabled, default_task")
     .eq("member_id", user.id)
@@ -924,11 +925,22 @@ export async function getMyAutoTimer(): Promise<ActionResult<AutoTimerSettings |
     .limit(1)
     .maybeSingle();
 
-  if (!data) return { data: null, error: null };
+  // Team member → their membership. Otherwise (owner) → their profile.
+  const source =
+    membership ??
+    (
+      await db
+        .from("profiles")
+        .select("auto_timer_enabled, default_task")
+        .eq("id", user.id)
+        .maybeSingle()
+    ).data;
+
+  if (!source) return { data: null, error: null };
   return {
     data: {
-      autoTimerEnabled: !!data.auto_timer_enabled,
-      defaultTask: data.default_task ?? "",
+      autoTimerEnabled: !!source.auto_timer_enabled,
+      defaultTask: source.default_task ?? "",
     },
     error: null,
   };
@@ -941,15 +953,25 @@ export async function updateMyAutoTimer(
   const user = await getAuthenticatedUser();
   if (!user) return UNAUTHORIZED;
 
-  // Applies to all teams this person is on. They can only edit their own rows.
-  const { error } = await createServiceClient()
+  const db = createServiceClient();
+  const patch = {
+    auto_timer_enabled: autoTimerEnabled,
+    default_task: defaultTask.trim() || null,
+  };
+
+  // If the user is on any team, update their membership rows (applies to all
+  // teams they're on). Otherwise they're an owner — update their profile.
+  const { data: membership } = await db
     .from("team_members")
-    .update({
-      auto_timer_enabled: autoTimerEnabled,
-      default_task: defaultTask.trim() || null,
-    })
+    .select("id")
     .eq("member_id", user.id)
-    .eq("status", "active");
+    .eq("status", "active")
+    .limit(1)
+    .maybeSingle();
+
+  const { error } = membership
+    ? await db.from("team_members").update(patch).eq("member_id", user.id).eq("status", "active")
+    : await db.from("profiles").update(patch).eq("id", user.id);
 
   if (error) return { data: null, error: error.message };
   return { data: undefined, error: null };

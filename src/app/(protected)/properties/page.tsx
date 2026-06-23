@@ -18,12 +18,23 @@ export default function PropertiesPage() {
   const [properties, setProperties] = useState<Property[]>([]);
   const [loading, setLoading] = useState(true);
   const [activeTag, setActiveTag] = useState<string | null>(null);
+  // Only owners and spouses may create/edit properties (managers & helpers can't).
+  const [canWrite, setCanWrite] = useState(false);
 
   useEffect(() => {
     async function load() {
       const supabase = createClient();
       const { data: { user } } = await supabase.auth.getUser();
       if (!user) return;
+
+      const { data: membership } = await supabase
+        .from("team_members")
+        .select("role")
+        .eq("member_id", user.id)
+        .eq("status", "active")
+        .limit(1)
+        .maybeSingle();
+      setCanWrite(!membership || membership.role === "spouse");
 
       const [{ data: allProps }, { data: logs }] = await Promise.all([
         supabase
@@ -97,12 +108,14 @@ export default function PropertiesPage() {
           </span>
         </div>
 
-        <Link
-          href="/properties/new"
-          className="inline-flex items-center gap-1.5 mt-3 font-mono text-[11px] uppercase tracking-[1.5px] text-plum underline decoration-tangerine underline-offset-4 decoration-[1.5px]"
-        >
-          + Add property
-        </Link>
+        {canWrite && (
+          <Link
+            href="/properties/new"
+            className="inline-flex items-center gap-1.5 mt-3 font-mono text-[11px] uppercase tracking-[1.5px] text-plum underline decoration-tangerine underline-offset-4 decoration-[1.5px]"
+          >
+            + Add property
+          </Link>
+        )}
       </div>
 
       {/* Tag filters */}
@@ -181,12 +194,14 @@ export default function PropertiesPage() {
                 )}
                 {!prop.isDeleted && (
                   <div className="flex items-center gap-1 mt-1">
-                    <Link
-                      href={`/properties/${prop.id}/edit`}
-                      className="font-mono text-[10px] uppercase tracking-[1.5px] text-slate hover:text-plum min-h-[44px] px-2 inline-flex items-center"
-                    >
-                      Edit
-                    </Link>
+                    {canWrite && (
+                      <Link
+                        href={`/properties/${prop.id}/edit`}
+                        className="font-mono text-[10px] uppercase tracking-[1.5px] text-slate hover:text-plum min-h-[44px] px-2 inline-flex items-center"
+                      >
+                        Edit
+                      </Link>
+                    )}
                     <Link
                       href={`/timer?property=${prop.id}`}
                       className="font-mono text-[10px] uppercase tracking-[1.5px] text-plum underline decoration-tangerine underline-offset-4 decoration-[1.5px] hover:text-plum-deep min-h-[44px] px-2 inline-flex items-center"
@@ -217,15 +232,18 @@ export default function PropertiesPage() {
             No properties yet
           </p>
           <p className="font-sans text-[13px] text-quill leading-relaxed mb-8 max-w-[280px] mx-auto">
-            Add your first rental property to start tracking your hosting
-            hours.
+            {canWrite
+              ? "Add your first rental property to start tracking your hosting hours."
+              : "No properties have been assigned to you yet."}
           </p>
-          <Link
-            href="/properties/new"
-            className="inline-block min-h-12 px-6 py-3.5 rounded-md text-[15px] font-medium bg-plum text-cream hover:bg-plum-deep transition-colors"
-          >
-            Add your first property
-          </Link>
+          {canWrite && (
+            <Link
+              href="/properties/new"
+              className="inline-block min-h-12 px-6 py-3.5 rounded-md text-[15px] font-medium bg-plum text-cream hover:bg-plum-deep transition-colors"
+            >
+              Add your first property
+            </Link>
+          )}
         </div>
       )}
 
