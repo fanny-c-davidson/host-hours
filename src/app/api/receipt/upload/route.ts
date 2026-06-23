@@ -10,9 +10,19 @@ import { thumbStoragePath, MAX_PHOTOS_PER_ENTRY } from "@/lib/photos";
 // per-entry photo cap (even across concurrent uploads).
 export async function POST(req: NextRequest) {
   const supabase = await createClient();
-  const {
+  let {
     data: { user },
   } = await supabase.auth.getUser();
+
+  // Mobile clients authenticate with a Bearer token instead of cookies.
+  if (!user) {
+    const authz = req.headers.get("authorization");
+    const token = authz?.startsWith("Bearer ") ? authz.slice(7) : null;
+    if (token) {
+      const { data } = await createServiceClient().auth.getUser(token);
+      user = data.user;
+    }
+  }
   if (!user) return new NextResponse("Unauthorized", { status: 401 });
 
   const form = await req.formData();

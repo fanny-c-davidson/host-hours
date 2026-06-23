@@ -14,6 +14,7 @@ import {
   type TeamRole,
 } from "@/lib/db";
 import { Card, MetricLabel, SectionLabel } from "@/components/app-ui";
+import { authenticate, isBiometricAvailable, isBiometricEnabled, setBiometricEnabled } from "@/lib/biometric";
 import { colors, fonts, radius, space } from "@/theme/tokens";
 
 const ROLE_LABEL: Record<TeamRole, string> = {
@@ -36,6 +37,8 @@ export default function SettingsScreen() {
   const [autoTimer, setAutoTimer] = useState(false);
   const [defaultTask, setDefaultTask] = useState("");
   const [savingAuto, setSavingAuto] = useState(false);
+  const [bioAvailable, setBioAvailable] = useState(false);
+  const [bioOn, setBioOn] = useState(false);
 
   useFocusEffect(
     useCallback(() => {
@@ -43,9 +46,16 @@ export default function SettingsScreen() {
       async function load() {
         if (!uid) return;
         const r = await getMyRole(uid);
-        const [profile, at] = await Promise.all([getProfile(uid), getMyAutoTimer(uid, r)]);
+        const [profile, at, bioAvail, bioEnabled] = await Promise.all([
+          getProfile(uid),
+          getMyAutoTimer(uid, r),
+          isBiometricAvailable(),
+          isBiometricEnabled(),
+        ]);
         if (!active) return;
         setRole(r);
+        setBioAvailable(bioAvail);
+        setBioOn(bioEnabled);
         setName(profile?.full_name || session?.user.email || "");
         setYear(profile?.tax_year ?? new Date().getFullYear());
         setGoal(profile?.goal_hours ?? 500);
@@ -67,6 +77,13 @@ export default function SettingsScreen() {
     setSavingAuto(true);
     await setMyAutoTimer(enabled, task);
     setSavingAuto(false);
+  }
+
+  async function toggleBiometric(next: boolean) {
+    // Require a successful prompt before enabling, so users can't lock out.
+    if (next && !(await authenticate())) return;
+    await setBiometricEnabled(next);
+    setBioOn(next);
   }
 
   const staff = isStaffRole(role);
@@ -153,6 +170,21 @@ export default function SettingsScreen() {
           )}
           {savingAuto && <Text style={{ fontSize: 11, color: colors.slate, marginTop: space(2) }}>Saving…</Text>}
         </Card>
+
+        {/* Biometric unlock */}
+        {bioAvailable && (
+          <Card style={{ marginBottom: space(4) }}>
+            <View style={{ flexDirection: "row", justifyContent: "space-between", alignItems: "center" }}>
+              <View style={{ flex: 1, paddingRight: space(3) }}>
+                <Text style={{ fontFamily: fonts.serif, fontSize: 16, color: colors.char }}>Biometric unlock</Text>
+                <Text style={{ fontSize: 12, color: colors.slate, marginTop: space(1) }}>
+                  Require Face ID / fingerprint to open the app.
+                </Text>
+              </View>
+              <Switch value={bioOn} onValueChange={toggleBiometric} trackColor={{ true: colors.plum, false: colors.stone }} thumbColor={colors.cream} />
+            </View>
+          </Card>
+        )}
 
         {/* Properties (owner + spouse) */}
         {canWriteProperties(role) && (

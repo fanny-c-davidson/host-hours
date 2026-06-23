@@ -21,7 +21,18 @@
     "plugins": [
       "expo-router",
       "expo-font",
-      "expo-asset"
+      "expo-asset",
+      [
+        "expo-local-authentication",
+        { "faceIDPermission": "Use Face ID to unlock Host Hours." }
+      ],
+      [
+        "expo-image-picker",
+        {
+          "photosPermission": "Host Hours needs photo access to attach receipts.",
+          "cameraPermission": "Host Hours needs the camera to capture receipts."
+        }
+      ]
     ],
     "experiments": {
       "typedRoutes": true

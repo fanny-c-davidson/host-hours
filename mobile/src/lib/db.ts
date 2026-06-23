@@ -122,24 +122,28 @@ export async function getMyRole(userId: string): Promise<TeamRole> {
   return (data?.role as TeamRole) ?? "owner";
 }
 
-/** Manual time entry: logs `hours` worth of time ending now. */
+/** Manual time entry: logs `hours` worth of time ending now. Returns the new id. */
 export async function createLog(
   userId: string,
   propertyId: string,
   title: string,
   hours: number,
-): Promise<{ error: string | null }> {
+): Promise<{ id: string | null; error: string | null }> {
   const end = new Date();
   const start = new Date(end.getTime() - hours * 3600 * 1000);
-  const { error } = await supabase.from("time_logs").insert({
-    user_id: userId,
-    property_id: propertyId,
-    title: title.trim() || "Untitled",
-    started_at: start.toISOString(),
-    ended_at: end.toISOString(),
-    source: "manual",
-  });
-  return { error: error?.message ?? null };
+  const { data, error } = await supabase
+    .from("time_logs")
+    .insert({
+      user_id: userId,
+      property_id: propertyId,
+      title: title.trim() || "Untitled",
+      started_at: start.toISOString(),
+      ended_at: end.toISOString(),
+      source: "manual",
+    })
+    .select("id")
+    .single();
+  return { id: data?.id ?? null, error: error?.message ?? null };
 }
 
 export async function getAllLogs(userId: string, limit = 100): Promise<LogEntry[]> {

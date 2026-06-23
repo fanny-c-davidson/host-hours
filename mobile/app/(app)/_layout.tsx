@@ -2,6 +2,7 @@ import { Redirect, Tabs } from "expo-router";
 import { ActivityIndicator, View } from "react-native";
 import { Ionicons } from "@expo/vector-icons";
 import { useAuth } from "@/lib/auth";
+import { LockGate } from "@/components/lock-gate";
 import { colors, fonts } from "@/theme/tokens";
 
 // Protected tab navigator (mirrors the web dock).
@@ -18,6 +19,7 @@ export default function AppLayout() {
   if (!session) return <Redirect href="/login" />;
 
   return (
+    <LockGate>
     <Tabs
       screenOptions={{
         headerShown: false,
@@ -51,5 +53,6 @@ export default function AppLayout() {
       <Tabs.Screen name="properties" options={{ href: null }} />
       <Tabs.Screen name="property-new" options={{ href: null }} />
     </Tabs>
+    </LockGate>
   );
 }
