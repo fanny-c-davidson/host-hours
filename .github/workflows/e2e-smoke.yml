@@ -29,8 +29,10 @@ jobs:
 
       - name: Run public smoke tests
         env:
-          # Use the just-deployed URL when available, else the stable prod URL.
-          BASE_URL: ${{ github.event.deployment_status.environment_url || 'https://host-hours.vercel.app' }}
+          # Test the stable public alias, NOT deployment_status.environment_url:
+          # per-deployment URLs are behind Vercel Deployment Protection (401).
+          # The alias points at the latest Production deploy once it's live.
+          BASE_URL: https://host-hours.vercel.app
         run: npx playwright test --project=public
 
       - name: Upload report
