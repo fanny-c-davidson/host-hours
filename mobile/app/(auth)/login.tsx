@@ -1,128 +1,85 @@
 import { useState } from "react";
-import {
-  ActivityIndicator,
-  KeyboardAvoidingView,
-  Platform,
-  Pressable,
-  Text,
-  TextInput,
-  View,
-} from "react-native";
-import { SafeAreaView } from "react-native-safe-area-context";
+import { View } from "react-native";
 import { useRouter } from "expo-router";
 import { useAuth } from "@/lib/auth";
-import { colors, fonts, radius, space } from "@/theme/tokens";
+import { space } from "@/theme/tokens";
+import {
+  AuthScreen,
+  Divider,
+  ErrorBanner,
+  Eyebrow,
+  Field,
+  GhostButton,
+  PrimaryButton,
+  Subtitle,
+  TextLink,
+  Title,
+} from "@/components/ui";
 
 export default function LoginScreen() {
-  const { signIn } = useAuth();
+  const { signIn, signInWithGoogle } = useAuth();
   const router = useRouter();
   const [email, setEmail] = useState("");
   const [password, setPassword] = useState("");
   const [error, setError] = useState<string | null>(null);
   const [loading, setLoading] = useState(false);
+  const [googleLoading, setGoogleLoading] = useState(false);
 
   async function handleSubmit() {
     setError(null);
     setLoading(true);
     const { error } = await signIn(email.trim(), password);
     setLoading(false);
-    if (error) {
-      setError(error);
-      return;
-    }
+    if (error) return setError(error);
     router.replace("/dashboard");
   }
 
+  async function handleGoogle() {
+    setError(null);
+    setGoogleLoading(true);
+    const { error } = await signInWithGoogle();
+    setGoogleLoading(false);
+    if (error) setError(error);
+    // Success navigates via the auth state change / (auth) layout redirect.
+  }
+
   return (
-    <SafeAreaView style={{ flex: 1, backgroundColor: colors.cream }}>
-      <KeyboardAvoidingView
-        behavior={Platform.OS === "ios" ? "padding" : undefined}
-        style={{ flex: 1, paddingHorizontal: space(7) }}
-      >
-        <View style={{ flex: 1, justifyContent: "center", maxWidth: 420, width: "100%", alignSelf: "center" }}>
-          <Text style={{ fontFamily: fonts.mono, fontSize: 11, letterSpacing: 1.5, textTransform: "uppercase", color: colors.tangerine, marginBottom: space(3) }}>
-            Sign in
-          </Text>
-          <Text style={{ fontFamily: fonts.serif, fontSize: 38, color: colors.plum, marginBottom: space(2) }}>
-            Welcome back.
-          </Text>
-          <Text style={{ fontFamily: fonts.serifRegular, fontStyle: "italic", fontSize: 15, color: colors.quill, marginBottom: space(8) }}>
-            Pick up where you left off.
-          </Text>
+    <AuthScreen>
+      <Eyebrow>Sign in</Eyebrow>
+      <Title>Welcome back.</Title>
+      <Subtitle>Pick up where you left off.</Subtitle>
 
-          {error && (
-            <View style={{ marginBottom: space(4), padding: space(3), borderRadius: radius.md, backgroundColor: colors.tangerineGlow }}>
-              <Text style={{ color: colors.tangerine, fontSize: 13 }}>{error}</Text>
-            </View>
-          )}
+      <ErrorBanner message={error} />
 
-          <Field label="Email">
-            <TextInput
-              value={email}
-              onChangeText={setEmail}
-              placeholder="you@example.com"
-              placeholderTextColor={colors.stone}
-              autoCapitalize="none"
-              keyboardType="email-address"
-              autoComplete="email"
-              style={inputStyle}
-            />
-          </Field>
+      <Field
+        label="Email"
+        value={email}
+        onChangeText={setEmail}
+        placeholder="you@example.com"
+        autoCapitalize="none"
+        keyboardType="email-address"
+        autoComplete="email"
+      />
+      <Field
+        label="Password"
+        value={password}
+        onChangeText={setPassword}
+        placeholder="••••••••"
+        secureTextEntry
+      />
 
-          <Field label="Password">
-            <TextInput
-              value={password}
-              onChangeText={setPassword}
-              placeholder="••••••••"
-              placeholderTextColor={colors.stone}
-              secureTextEntry
-              style={inputStyle}
-            />
-          </Field>
+      <View style={{ alignItems: "flex-end", marginBottom: space(5), marginTop: -space(2) }}>
+        <TextLink label="Forgot password" onPress={() => router.push("/forgot-password")} />
+      </View>
 
-          <Pressable
-            onPress={handleSubmit}
-            disabled={loading}
-            style={{
-              marginTop: space(2),
-              minHeight: 48,
-              borderRadius: radius.md,
-              backgroundColor: colors.plum,
-              alignItems: "center",
-              justifyContent: "center",
-              opacity: loading ? 0.6 : 1,
-            }}
-          >
-            {loading ? (
-              <ActivityIndicator color={colors.cream} />
-            ) : (
-              <Text style={{ color: colors.cream, fontSize: 15, fontWeight: "500" }}>Sign in</Text>
-            )}
-          </Pressable>
-        </View>
-      </KeyboardAvoidingView>
-    </SafeAreaView>
+      <PrimaryButton label="Sign in" onPress={handleSubmit} loading={loading} />
+
+      <Divider label="or" />
+      <GhostButton label="Continue with Google" onPress={handleGoogle} loading={googleLoading} />
+
+      <View style={{ flexDirection: "row", justifyContent: "center", gap: space(2), marginTop: space(8) }}>
+        <TextLink label="New here? Create account" onPress={() => router.push("/signup")} />
+      </View>
+    </AuthScreen>
   );
 }
-
-function Field({ label, children }: { label: string; children: React.ReactNode }) {
-  return (
-    <View style={{ marginBottom: space(5) }}>
-      <Text style={{ fontFamily: fonts.mono, fontSize: 10, letterSpacing: 1.5, textTransform: "uppercase", color: colors.quill, marginBottom: space(2) }}>
-        {label}
-      </Text>
-      {children}
-    </View>
-  );
-}
-
-const inputStyle = {
-  minHeight: 48,
-  paddingHorizontal: space(4),
-  borderWidth: 1,
-  borderColor: colors.chalk,
-  borderRadius: radius.md,
-  fontSize: 15,
-  color: colors.char,
-  backgroundColor: colors.cream,
-} as const;

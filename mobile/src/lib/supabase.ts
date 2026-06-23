@@ -20,6 +20,7 @@ export const supabase = createClient(url, anonKey, {
     autoRefreshToken: true,
     persistSession: true,
     detectSessionInUrl: false, // no URL-based session on native
+    flowType: "pkce", // OAuth + reset deep links exchange a code for the session
   },
 });
 
