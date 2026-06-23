@@ -31,12 +31,16 @@ create or replace function pg_temp.mk_test_user(
 begin
   insert into auth.users (
     instance_id, id, aud, role, email, encrypted_password, email_confirmed_at,
-    raw_app_meta_data, raw_user_meta_data, created_at, updated_at
+    raw_app_meta_data, raw_user_meta_data, created_at, updated_at,
+    -- GoTrue can't scan NULLs in these at sign-in ("Database error querying
+    -- schema"); normal signups store '' here, so we must too.
+    confirmation_token, recovery_token, email_change, email_change_token_new
   ) values (
     '00000000-0000-0000-0000-000000000000', p_uid, 'authenticated', 'authenticated',
     p_email, crypt(p_pass, gen_salt('bf')), now(),
     '{"provider":"email","providers":["email"]}'::jsonb,
-    jsonb_build_object('full_name', p_name), now(), now()
+    jsonb_build_object('full_name', p_name), now(), now(),
+    '', '', '', ''
   );
   insert into auth.identities (
     id, user_id, provider_id, identity_data, provider,
