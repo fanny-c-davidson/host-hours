@@ -1,5 +1,6 @@
 import { Platform } from "react-native";
 import * as Location from "expo-location";
+import * as Notifications from "expo-notifications";
 import * as TaskManager from "expo-task-manager";
 import { supabase } from "./supabase";
 import {
@@ -7,11 +8,30 @@ import {
   getGeoProperties,
   getMyAutoTimer,
   getMyRole,
+  getProperties,
   startTimer,
   stopTimer,
 } from "./db";
 
 export const GEOFENCE_TASK = "hh-geofence";
+
+// Confirmation the auto-timer acted — fired from the background task, so the
+// user knows a timer started/stopped without opening the app.
+async function notifyAutoTimer(title: string, body: string) {
+  try {
+    await Notifications.scheduleNotificationAsync({
+      content: { title, body },
+      trigger: null, // deliver immediately
+    });
+  } catch {
+    // Notifications not permitted — the timer change itself still happened.
+  }
+}
+
+async function propertyName(propertyId: string): Promise<string> {
+  const props = await getProperties().catch(() => []);
+  return props.find((p) => p.id === propertyId)?.name ?? "your property";
+}
 
 // Background handler: auto start/stop the timer as the user enters/leaves an
 // assigned property. Runs without React context, so it talks to Supabase
@@ -34,10 +54,18 @@ if (Platform.OS !== "web")
     if (existing) return; // already running for this property
     const role = await getMyRole(uid);
     const at = await getMyAutoTimer(uid, role);
-    await startTimer(uid, propertyId, at.defaultTask || "Auto-timer");
+    const { error: startErr } = await startTimer(uid, propertyId, at.defaultTask || "Auto-timer");
+    if (!startErr) {
+      const name = await propertyName(propertyId);
+      await notifyAutoTimer("Timer started", `You arrived at ${name} — the timer is running.`);
+    }
   } else if (eventType === Location.GeofencingEventType.Exit) {
     const existing = await getActiveTimerByProperty(uid, propertyId);
-    if (existing) await stopTimer(existing, uid);
+    if (existing) {
+      await stopTimer(existing, uid);
+      const name = await propertyName(propertyId);
+      await notifyAutoTimer("Timer stopped", `You left ${name} — your hours were logged.`);
+    }
   }
 });
 
