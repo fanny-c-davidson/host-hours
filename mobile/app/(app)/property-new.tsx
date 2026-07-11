@@ -5,6 +5,7 @@ import { Ionicons } from "@expo/vector-icons";
 import { useFocusEffect, useRouter } from "expo-router";
 import { useAuth } from "@/lib/auth";
 import { canWriteProperties, createProperty, getMyRole } from "@/lib/db";
+import { AddressInput } from "@/components/address-input";
 import { MetricLabel, SectionLabel } from "@/components/app-ui";
 import { colors, fonts, radius, space } from "@/theme/tokens";
 
@@ -16,6 +17,7 @@ export default function NewPropertyScreen() {
   const router = useRouter();
   const [name, setName] = useState("");
   const [address, setAddress] = useState("");
+  const [coords, setCoords] = useState<{ latitude: number; longitude: number } | null>(null);
   const [color, setColor] = useState(PRESET_COLORS[0]);
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState<string | null>(null);
@@ -34,7 +36,7 @@ export default function NewPropertyScreen() {
     setError(null);
     if (!name.trim()) return setError("Give the property a name.");
     setBusy(true);
-    const { error } = await createProperty(uid!, name, address, color);
+    const { error } = await createProperty(uid!, name, address, color, coords);
     setBusy(false);
     if (error) return setError(error);
     router.replace("/properties");
@@ -62,7 +64,14 @@ export default function NewPropertyScreen() {
 
         <View style={{ height: space(5) }} />
         <MetricLabel>Address (optional)</MetricLabel>
-        <TextInput value={address} onChangeText={setAddress} placeholder="123 Main St" placeholderTextColor={colors.stone} style={inputStyle} />
+        <AddressInput
+          value={address}
+          onChange={setAddress}
+          onSelect={(addr, lat, lng) => {
+            setAddress(addr);
+            setCoords({ latitude: lat, longitude: lng });
+          }}
+        />
 
         <View style={{ height: space(5) }} />
         <MetricLabel>Color</MetricLabel>

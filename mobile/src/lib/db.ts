@@ -9,6 +9,7 @@ export type Property = { id: string; name: string; color: string };
 
 export type Profile = {
   full_name: string | null;
+  email: string | null;
   tax_year: number | null;
   goal_hours: number | null;
   target_test: string | null;
@@ -37,7 +38,7 @@ export type LogEntry = {
 export async function getProfile(userId: string): Promise<Profile | null> {
   const { data } = await supabase
     .from("profiles")
-    .select("full_name, tax_year, goal_hours, target_test")
+    .select("full_name, email, tax_year, goal_hours, target_test")
     .eq("id", userId)
     .single();
   return data;
@@ -169,6 +170,28 @@ export async function getTimeLog(logId: string) {
     property_id: string;
     property: { name: string } | null;
   } | null;
+}
+
+export async function updateProfileName(
+  userId: string,
+  fullName: string,
+  email: string,
+): Promise<{ error: string | null }> {
+  const { error } = await supabase
+    .from("profiles")
+    .update({ full_name: fullName, email })
+    .eq("id", userId);
+  if (error) return { error: error.message };
+  await supabase.auth.updateUser({ data: { full_name: fullName } });
+  return { error: null };
+}
+
+export async function updateTaxSettings(
+  userId: string,
+  fields: { tax_year: number; target_test: string; goal_hours: number },
+): Promise<{ error: string | null }> {
+  const { error } = await supabase.from("profiles").update(fields).eq("id", userId);
+  return { error: error?.message ?? null };
 }
 
 export type TimeLogPhoto = { id: string; time_log_id: string; file_name: string };
@@ -342,12 +365,75 @@ export async function createProperty(
   name: string,
   address: string,
   color: string,
+  coords?: { latitude: number; longitude: number } | null,
 ): Promise<{ error: string | null }> {
   const { error } = await supabase.from("properties").insert({
     user_id: userId,
     name: name.trim(),
     address: address.trim() || null,
     color,
+    latitude: coords?.latitude ?? null,
+    longitude: coords?.longitude ?? null,
   });
   return { error: error?.message ?? null };
+}
+
+export type PropertyDetail = {
+  id: string;
+  name: string;
+  address: string | null;
+  color: string;
+  tags: string[] | null;
+  latitude: number | null;
+  longitude: number | null;
+};
+
+export async function getPropertyDetail(id: string): Promise<PropertyDetail | null> {
+  const { data } = await supabase
+    .from("properties")
+    .select("id, name, address, color, tags, latitude, longitude")
+    .eq("id", id)
+    .is("deleted_at", null)
+    .maybeSingle();
+  return (data as PropertyDetail | null) ?? null;
+}
+
+/** Every tag in use across the caller's visible properties (for suggestions). */
+export async function getAllPropertyTags(): Promise<string[]> {
+  const { data } = await supabase.from("properties").select("tags").is("deleted_at", null);
+  const set = new Set<string>();
+  (data ?? []).forEach((p: { tags: string[] | null }) => (p.tags ?? []).forEach((t) => set.add(t)));
+  return Array.from(set).sort();
+}
+
+/**
+ * Update a property. An empty result means RLS matched no rows — the caller
+ * isn't allowed to edit it (mirrors the web app's silent-failure guard).
+ */
+export async function updateProperty(
+  id: string,
+  fields: {
+    name: string;
+    address: string | null;
+    color: string;
+    tags: string[];
+    latitude: number | null;
+    longitude: number | null;
+  },
+): Promise<{ error: string | null }> {
+  const { data, error } = await supabase.from("properties").update(fields).eq("id", id).select("id");
+  if (error) return { error: error.message };
+  if (!data || data.length === 0) return { error: "You don't have permission to edit this property." };
+  return { error: null };
+}
+
+export async function softDeleteProperty(id: string): Promise<{ error: string | null }> {
+  const { data, error } = await supabase
+    .from("properties")
+    .update({ deleted_at: new Date().toISOString() })
+    .eq("id", id)
+    .select("id");
+  if (error) return { error: error.message };
+  if (!data || data.length === 0) return { error: "You don't have permission to delete this property." };
+  return { error: null };
 }

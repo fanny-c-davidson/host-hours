@@ -111,6 +111,11 @@ export default function AppLayout() {
         {/* Hidden screens — reachable via navigation but not shown in the tab bar */}
         <Tabs.Screen name="timer" options={{ href: null }} />
         <Tabs.Screen name="property-new" options={{ href: null }} />
+        <Tabs.Screen name="property-edit" options={{ href: null }} />
+        <Tabs.Screen name="settings-profile" options={{ href: null }} />
+        <Tabs.Screen name="settings-password" options={{ href: null }} />
+        <Tabs.Screen name="settings-tax" options={{ href: null }} />
+        <Tabs.Screen name="settings-contact" options={{ href: null }} />
       </Tabs>
     </LockGate>
   );

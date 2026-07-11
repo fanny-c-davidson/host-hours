@@ -107,7 +107,7 @@ export default function SettingsScreen() {
         <SectionLabel>Settings</SectionLabel>
 
         {/* Profile */}
-        <View style={{ flexDirection: "row", alignItems: "center", gap: space(4), marginBottom: space(6) }}>
+        <Pressable onPress={() => router.push("/settings-profile")} style={{ flexDirection: "row", alignItems: "center", gap: space(4), marginBottom: space(6) }}>
           <View style={{ width: 56, height: 56, borderRadius: 28, backgroundColor: colors.plum, alignItems: "center", justifyContent: "center" }}>
             <Text style={{ color: colors.cream, fontFamily: fonts.serif, fontSize: 22 }}>{initials}</Text>
           </View>
@@ -118,11 +118,13 @@ export default function SettingsScreen() {
           <View style={{ borderWidth: 1, borderColor: colors.tangerine, borderRadius: radius.pill, paddingHorizontal: space(2.5), paddingVertical: space(1) }}>
             <Text style={{ fontFamily: fonts.mono, fontSize: 9, letterSpacing: 1, textTransform: "uppercase", color: colors.tangerine }}>{ROLE_LABEL[role]}</Text>
           </View>
-        </View>
+          <Ionicons name="chevron-forward" size={16} color={colors.stone} />
+        </Pressable>
 
-        {/* Target & Goal */}
+        {/* Target & Goal — tap to edit (mirrors web /settings/tax) */}
+        <Pressable onPress={() => router.push("/settings-tax")}>
         <Card style={{ marginBottom: space(4) }}>
-          <View style={{ flexDirection: "row", justifyContent: "space-between" }}>
+          <View style={{ flexDirection: "row", justifyContent: "space-between", alignItems: "center" }}>
             <View>
               <MetricLabel>Tax year</MetricLabel>
               <Text style={{ fontFamily: fonts.serif, fontSize: 18, color: colors.char }}>{year}</Text>
@@ -139,8 +141,10 @@ export default function SettingsScreen() {
                 </Text>
               </View>
             )}
+            <Ionicons name="chevron-forward" size={16} color={colors.stone} />
           </View>
         </Card>
+        </Pressable>
 
         {/* Auto-timer */}
         <Card style={{ marginBottom: space(4) }}>
@@ -196,6 +200,16 @@ export default function SettingsScreen() {
             <Ionicons name="chevron-forward" size={18} color={colors.stone} />
           </Pressable>
         )}
+
+        <Pressable onPress={() => router.push("/settings-password")} style={rowLink}>
+          <Text style={{ fontFamily: fonts.serif, fontSize: 16, color: colors.char }}>Change password</Text>
+          <Ionicons name="chevron-forward" size={18} color={colors.stone} />
+        </Pressable>
+
+        <Pressable onPress={() => router.push("/settings-contact")} style={rowLink}>
+          <Text style={{ fontFamily: fonts.serif, fontSize: 16, color: colors.char }}>Contact us</Text>
+          <Ionicons name="chevron-forward" size={18} color={colors.stone} />
+        </Pressable>
 
         {/* Sign out */}
         <Pressable

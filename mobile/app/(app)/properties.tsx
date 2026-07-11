@@ -61,10 +61,14 @@ export default function PropertiesScreen() {
         ) : (
           properties.map((p) => (
             <View key={p.id} style={{ flexDirection: "row", alignItems: "center", justifyContent: "space-between", paddingVertical: space(4.5), borderBottomWidth: 1, borderBottomColor: colors.chalk }}>
-              <View style={{ flexDirection: "row", alignItems: "center", gap: space(3) }}>
+              <Pressable
+                onPress={canWrite ? () => router.push({ pathname: "/property-edit", params: { id: p.id } }) : undefined}
+                style={{ flexDirection: "row", alignItems: "center", gap: space(3), flex: 1 }}
+              >
                 <View style={{ width: 12, height: 12, borderRadius: 6, backgroundColor: p.color }} />
                 <Text style={{ fontFamily: fonts.serif, fontSize: 17, color: colors.char }}>{p.name}</Text>
-              </View>
+                {canWrite && <Ionicons name="chevron-forward" size={14} color={colors.stone} />}
+              </Pressable>
               <Pressable onPress={() => router.push({ pathname: "/timer", params: { property: p.id } })}>
                 <Text style={{ fontFamily: fonts.mono, fontSize: 10, letterSpacing: 1, textTransform: "uppercase", color: colors.plum, textDecorationLine: "underline" }}>
                   Start timer
