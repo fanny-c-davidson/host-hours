@@ -65,7 +65,7 @@ export default function PropertiesScreen() {
                 <View style={{ width: 12, height: 12, borderRadius: 6, backgroundColor: p.color }} />
                 <Text style={{ fontFamily: fonts.serif, fontSize: 17, color: colors.char }}>{p.name}</Text>
               </View>
-              <Pressable onPress={() => router.push("/timer")}>
+              <Pressable onPress={() => router.push({ pathname: "/timer", params: { property: p.id } })}>
                 <Text style={{ fontFamily: fonts.mono, fontSize: 10, letterSpacing: 1, textTransform: "uppercase", color: colors.plum, textDecorationLine: "underline" }}>
                   Start timer
                 </Text>

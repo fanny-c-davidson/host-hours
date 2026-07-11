@@ -171,6 +171,19 @@ export async function getTimeLog(logId: string) {
   } | null;
 }
 
+export type TimeLogPhoto = { id: string; time_log_id: string; file_name: string };
+
+/** Photos attached to any of the given time logs (RLS scopes to the caller). */
+export async function getTimeLogPhotos(timeLogIds: string[]): Promise<TimeLogPhoto[]> {
+  if (timeLogIds.length === 0) return [];
+  const { data } = await supabase
+    .from("time_log_photos")
+    .select("id, time_log_id, file_name")
+    .in("time_log_id", timeLogIds)
+    .order("created_at", { ascending: true });
+  return (data as TimeLogPhoto[] | null) ?? [];
+}
+
 /** Update a time_log's editable fields. */
 export async function updateTimeLog(
   logId: string,

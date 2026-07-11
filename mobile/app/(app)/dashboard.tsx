@@ -37,6 +37,7 @@ import {
   mastheadDate,
   type LogGroup,
 } from "@/lib/format";
+import { ReceiptAttach } from "@/components/receipt-attach";
 import { colors, fonts, radius, space } from "@/theme/tokens";
 
 // ---------------------------------------------------------------------------
@@ -769,14 +770,7 @@ function ActivityRow({
             style={{ minHeight: 60, paddingHorizontal: space(4), paddingVertical: space(3), borderWidth: 1, borderColor: colors.chalk, borderRadius: radius.md, fontSize: 14, color: colors.char, backgroundColor: colors.cream, textAlignVertical: "top" }} />
 
           <Text style={{ fontFamily: fonts.mono, fontSize: 10, letterSpacing: 1.5, textTransform: "uppercase", color: colors.quill, fontWeight: "500", marginTop: space(4), marginBottom: space(2) }}>Receipts or photos</Text>
-          <View style={{ flexDirection: "row", gap: space(3) }}>
-            <View style={{ flex: 1, alignItems: "center", justifyContent: "center", borderWidth: 1, borderStyle: "dashed", borderColor: colors.stone, borderRadius: radius.md, paddingVertical: space(3) }}>
-              <Text style={{ fontFamily: fonts.mono, fontSize: 10, letterSpacing: 1.5, textTransform: "uppercase", color: colors.quill, fontWeight: "500" }}>Gallery</Text>
-            </View>
-            <View style={{ flex: 1, alignItems: "center", justifyContent: "center", borderWidth: 1, borderStyle: "dashed", borderColor: colors.stone, borderRadius: radius.md, paddingVertical: space(3) }}>
-              <Text style={{ fontFamily: fonts.mono, fontSize: 10, letterSpacing: 1.5, textTransform: "uppercase", color: colors.quill, fontWeight: "500" }}>Camera</Text>
-            </View>
-          </View>
+          <ReceiptAttach timeLogIds={ids} />
         </View>
       )}
     </View>

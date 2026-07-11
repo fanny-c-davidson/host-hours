@@ -1,6 +1,6 @@
 import { NextRequest, NextResponse } from "next/server";
-import { createClient } from "@/lib/supabase/server";
 import { createServiceClient } from "@/lib/supabase/service";
+import { getUserFromRequest } from "@/lib/api-auth";
 import { r2GetBytes, r2Delete } from "@/lib/r2";
 import { thumbStoragePath } from "@/lib/photos";
 
@@ -16,10 +16,7 @@ export async function GET(
   const { id } = await params;
   const wantThumb = req.nextUrl.searchParams.get("thumb") === "1";
 
-  const supabase = await createClient();
-  const {
-    data: { user },
-  } = await supabase.auth.getUser();
+  const user = await getUserFromRequest(req);
   if (!user) return new NextResponse("Unauthorized", { status: 401 });
 
   const db = createServiceClient();
@@ -61,15 +58,12 @@ export async function GET(
 // Delete a photo: removes both R2 objects (full + thumbnail) and the metadata
 // row. Only the photo's owner may delete it.
 export async function DELETE(
-  _req: NextRequest,
+  req: NextRequest,
   { params }: { params: Promise<{ id: string }> },
 ) {
   const { id } = await params;
 
-  const supabase = await createClient();
-  const {
-    data: { user },
-  } = await supabase.auth.getUser();
+  const user = await getUserFromRequest(req);
   if (!user) return new NextResponse("Unauthorized", { status: 401 });
 
   const db = createServiceClient();

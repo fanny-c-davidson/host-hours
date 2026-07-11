@@ -28,7 +28,8 @@ import {
   type Property,
   type TaskType,
 } from "@/lib/db";
-import { formatDuration, formatDurationLong, formatElapsed, formatHours } from "@/lib/format";
+import { formatDuration, formatDurationLong, formatElapsed } from "@/lib/format";
+import { ReceiptAttach } from "@/components/receipt-attach";
 import { colors, fonts, radius, space } from "@/theme/tokens";
 
 // ---------------------------------------------------------------------------
@@ -428,8 +429,6 @@ export default function TimerScreen() {
   const activeProperty = properties.find(
     (p) => p.id === (active ? active.property_id : propertyId),
   );
-
-  const todayHours = todaySecs / 3600;
 
   // ====================================================================
   // RENDER
@@ -1239,62 +1238,7 @@ export default function TimerScreen() {
                     >
                       Receipts or photos
                     </Text>
-                    <View style={{ flexDirection: "row", gap: space(3) }}>
-                      <View
-                        style={{
-                          flex: 1,
-                          flexDirection: "row",
-                          alignItems: "center",
-                          justifyContent: "center",
-                          gap: space(2),
-                          borderWidth: 1,
-                          borderStyle: "dashed",
-                          borderColor: colors.stone,
-                          borderRadius: radius.md,
-                          paddingVertical: space(3),
-                        }}
-                      >
-                        <Text
-                          style={{
-                            fontFamily: fonts.mono,
-                            fontSize: 10,
-                            letterSpacing: 1.5,
-                            textTransform: "uppercase",
-                            color: colors.quill,
-                            fontWeight: "500",
-                          }}
-                        >
-                          Gallery
-                        </Text>
-                      </View>
-                      <View
-                        style={{
-                          flex: 1,
-                          flexDirection: "row",
-                          alignItems: "center",
-                          justifyContent: "center",
-                          gap: space(2),
-                          borderWidth: 1,
-                          borderStyle: "dashed",
-                          borderColor: colors.stone,
-                          borderRadius: radius.md,
-                          paddingVertical: space(3),
-                        }}
-                      >
-                        <Text
-                          style={{
-                            fontFamily: fonts.mono,
-                            fontSize: 10,
-                            letterSpacing: 1.5,
-                            textTransform: "uppercase",
-                            color: colors.quill,
-                            fontWeight: "500",
-                          }}
-                        >
-                          Camera
-                        </Text>
-                      </View>
-                    </View>
+                    <ReceiptAttach timeLogIds={[stoppedEntry.id]} />
                   </View>
                 </View>
               </>

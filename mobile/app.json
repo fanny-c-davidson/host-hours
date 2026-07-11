@@ -34,7 +34,9 @@
         "android.permission.FOREGROUND_SERVICE",
         "android.permission.FOREGROUND_SERVICE_LOCATION",
         "android.permission.USE_BIOMETRIC",
-        "android.permission.USE_FINGERPRINT",
+        "android.permission.USE_FINGERPRINT"
+      ],
+      "blockedPermissions": [
         "android.permission.RECORD_AUDIO"
       ]
     },
@@ -55,7 +57,8 @@
         "expo-image-picker",
         {
           "photosPermission": "Host Hours needs photo access to attach receipts.",
-          "cameraPermission": "Host Hours needs the camera to capture receipts."
+          "cameraPermission": "Host Hours needs the camera to capture receipts.",
+          "microphonePermission": false
         }
       ],
       [

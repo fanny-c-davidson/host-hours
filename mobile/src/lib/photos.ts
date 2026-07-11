@@ -28,6 +28,23 @@ export async function pickReceipt(source: "camera" | "library"): Promise<PickedP
   return toPhoto(await ImagePicker.launchImageLibraryAsync({ quality: 0.6 }));
 }
 
+/** Delete a photo (removes the R2 objects + metadata row via the web API). */
+export async function deleteReceipt(photoId: string): Promise<{ error: string | null }> {
+  const { data } = await supabase.auth.getSession();
+  const token = data.session?.access_token;
+  if (!token) return { error: "Not authenticated" };
+  try {
+    const res = await fetch(`${API_URL}/api/receipt/${photoId}`, {
+      method: "DELETE",
+      headers: { Authorization: `Bearer ${token}` },
+    });
+    if (!res.ok) return { error: `Delete failed (${res.status})` };
+    return { error: null };
+  } catch (e: any) {
+    return { error: e?.message ?? "Delete failed" };
+  }
+}
+
 export async function uploadReceipt(
   timeLogId: string,
   photo: PickedPhoto,

@@ -1,6 +1,6 @@
 import { NextRequest, NextResponse } from "next/server";
-import { createClient } from "@/lib/supabase/server";
 import { createServiceClient } from "@/lib/supabase/service";
+import { getUserFromRequest } from "@/lib/api-auth";
 import { r2Put } from "@/lib/r2";
 import { thumbStoragePath, MAX_PHOTOS_PER_ENTRY } from "@/lib/photos";
 
@@ -9,20 +9,7 @@ import { thumbStoragePath, MAX_PHOTOS_PER_ENTRY } from "@/lib/photos";
 // Authorizes the uploader as the owner of the target time-log and enforces the
 // per-entry photo cap (even across concurrent uploads).
 export async function POST(req: NextRequest) {
-  const supabase = await createClient();
-  let {
-    data: { user },
-  } = await supabase.auth.getUser();
-
-  // Mobile clients authenticate with a Bearer token instead of cookies.
-  if (!user) {
-    const authz = req.headers.get("authorization");
-    const token = authz?.startsWith("Bearer ") ? authz.slice(7) : null;
-    if (token) {
-      const { data } = await createServiceClient().auth.getUser(token);
-      user = data.user;
-    }
-  }
+  const user = await getUserFromRequest(req);
   if (!user) return new NextResponse("Unauthorized", { status: 401 });
 
   const form = await req.formData();
