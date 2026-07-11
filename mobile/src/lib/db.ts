@@ -244,6 +244,25 @@ export async function updateTimeLog(
   return { error: error?.message ?? null };
 }
 
+/**
+ * The team the caller manages: their own (as owner) or the one they belong to
+ * (as spouse/manager/employee).
+ */
+export async function getMyTeamOwner(
+  userId: string,
+): Promise<{ ownerId: string; role: TeamRole }> {
+  const { data } = await supabase
+    .from("team_members")
+    .select("owner_id, role")
+    .eq("member_id", userId)
+    .eq("status", "active")
+    .neq("owner_id", userId)
+    .limit(1)
+    .maybeSingle();
+  if (data) return { ownerId: data.owner_id, role: data.role as TeamRole };
+  return { ownerId: userId, role: "owner" };
+}
+
 /** The caller's role on a team they belong to; "owner" if they're not a member. */
 export async function getMyRole(userId: string): Promise<TeamRole> {
   const { data } = await supabase

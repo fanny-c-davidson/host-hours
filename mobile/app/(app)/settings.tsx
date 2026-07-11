@@ -201,6 +201,14 @@ export default function SettingsScreen() {
           </Pressable>
         )}
 
+        {/* Team management — owner, spouse, manager (matches web permission matrix) */}
+        {role !== "employee" && (
+          <Pressable onPress={() => router.push("/settings-team")} style={rowLink}>
+            <Text style={{ fontFamily: fonts.serif, fontSize: 16, color: colors.char }}>Manage team</Text>
+            <Ionicons name="chevron-forward" size={18} color={colors.stone} />
+          </Pressable>
+        )}
+
         {/* Billing — owner only (matches web permission matrix) */}
         {role === "owner" && (
           <Pressable onPress={() => router.push("/settings-billing")} style={rowLink}>

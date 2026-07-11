@@ -1,5 +1,7 @@
 import 'server-only';
+import { headers } from 'next/headers';
 import { createClient } from '@/lib/supabase/server';
+import { createServiceClient } from '@/lib/supabase/service';
 import type { ActionResult } from '@/types/app';
 
 /**
@@ -7,6 +9,10 @@ import type { ActionResult } from '@/types/app';
  *
  * Uses getUser() (not getSession()) to re-validate the JWT against
  * Supabase Auth on every call — prevents forged session attacks.
+ *
+ * Falls back to an `Authorization: Bearer <access token>` header (also
+ * validated against Supabase Auth) so the mobile app can call these actions
+ * through the /api/team bridge with its token-based session.
  *
  * Usage pattern in Server Actions:
  *
@@ -20,7 +26,14 @@ import type { ActionResult } from '@/types/app';
 export async function getAuthenticatedUser() {
   const supabase = await createClient();
   const { data: { user } } = await supabase.auth.getUser();
-  return user ?? null;
+  if (user) return user;
+
+  const authz = (await headers()).get('authorization');
+  const token = authz?.startsWith('Bearer ') ? authz.slice(7) : null;
+  if (!token) return null;
+
+  const { data } = await createServiceClient().auth.getUser(token);
+  return data.user ?? null;
 }
 
 /** Convenience type for early-return auth check results. */

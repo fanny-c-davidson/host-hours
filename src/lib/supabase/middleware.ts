@@ -67,6 +67,12 @@ export async function updateSession(request: NextRequest) {
     return NextResponse.redirect(resetUrl);
   }
 
+  // API routes authenticate themselves (cookie or mobile Bearer token) and a
+  // login redirect is meaningless to a programmatic client — pass them through.
+  if (pathname.startsWith('/api/')) {
+    return supabaseResponse;
+  }
+
   // Redirect unauthenticated users away from protected routes.
   if (!user && !isPublicRoute(pathname)) {
     const loginUrl = request.nextUrl.clone();
