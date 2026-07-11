@@ -19,13 +19,17 @@ export type ActiveTimer = {
   property_id: string;
   title: string;
   started_at: string;
+  description: string | null;
 };
 
 export type LogEntry = {
   id: string;
   title: string;
   started_at: string;
+  ended_at: string;
   duration_secs: number;
+  description: string | null;
+  is_onsite: boolean;
   property_id: string;
   propertyName: string | null;
 };
@@ -65,7 +69,7 @@ export async function getProperties(): Promise<Property[]> {
 export async function getRecentLogs(userId: string, limit = 5): Promise<LogEntry[]> {
   const { data } = await supabase
     .from("time_logs")
-    .select("id, title, started_at, duration_secs, property_id, property:properties(name)")
+    .select("id, title, started_at, ended_at, duration_secs, description, is_onsite, property_id, property:properties(name)")
     .eq("user_id", userId)
     .is("deleted_at", null)
     .order("started_at", { ascending: false })
@@ -74,7 +78,10 @@ export async function getRecentLogs(userId: string, limit = 5): Promise<LogEntry
     id: r.id,
     title: r.title,
     started_at: r.started_at,
+    ended_at: r.ended_at,
     duration_secs: r.duration_secs,
+    description: r.description ?? null,
+    is_onsite: !!r.is_onsite,
     property_id: r.property_id,
     propertyName: r.property?.name ?? null,
   }));
@@ -112,7 +119,7 @@ export async function getActiveTimerByProperty(userId: string, propertyId: strin
 export async function getActiveTimer(userId: string): Promise<ActiveTimer | null> {
   const { data } = await supabase
     .from("active_timers")
-    .select("id, property_id, title, started_at")
+    .select("id, property_id, title, started_at, description")
     .eq("user_id", userId)
     .order("started_at", { ascending: false })
     .limit(1)
@@ -128,14 +135,48 @@ export async function startTimer(
   const { data, error } = await supabase
     .from("active_timers")
     .insert({ user_id: userId, property_id: propertyId, title: title.trim() || "Untitled" })
-    .select("id, property_id, title, started_at")
+    .select("id, property_id, title, started_at, description")
     .single();
   return { data, error: error?.message ?? null };
 }
 
 /** Moves an active timer into time_logs via the server-side RPC. */
-export async function stopTimer(timerId: string, userId: string): Promise<{ error: string | null }> {
-  const { error } = await supabase.rpc("stop_timer", { p_timer_id: timerId, p_user_id: userId });
+export async function stopTimer(
+  timerId: string,
+  userId: string,
+): Promise<{ data: { id: string; duration_secs: number } | null; error: string | null }> {
+  const { data, error } = await supabase
+    .rpc("stop_timer", { p_timer_id: timerId, p_user_id: userId })
+    .single();
+  return { data: data as { id: string; duration_secs: number } | null, error: error?.message ?? null };
+}
+
+/** Fetch a single time_log by ID for the post-stop editor. */
+export async function getTimeLog(logId: string) {
+  const { data } = await supabase
+    .from("time_logs")
+    .select("id, title, started_at, ended_at, duration_secs, description, is_onsite, property_id, property:properties(name)")
+    .eq("id", logId)
+    .single();
+  return data as {
+    id: string;
+    title: string;
+    started_at: string;
+    ended_at: string;
+    duration_secs: number;
+    description: string | null;
+    is_onsite: boolean;
+    property_id: string;
+    property: { name: string } | null;
+  } | null;
+}
+
+/** Update a time_log's editable fields. */
+export async function updateTimeLog(
+  logId: string,
+  fields: { description?: string | null; is_onsite?: boolean; started_at?: string; ended_at?: string },
+): Promise<{ error: string | null }> {
+  const { error } = await supabase.from("time_logs").update(fields).eq("id", logId);
   return { error: error?.message ?? null };
 }
 
@@ -178,7 +219,7 @@ export async function createLog(
 export async function getAllLogs(userId: string, limit = 100): Promise<LogEntry[]> {
   const { data } = await supabase
     .from("time_logs")
-    .select("id, title, started_at, duration_secs, property_id, property:properties(name)")
+    .select("id, title, started_at, ended_at, duration_secs, description, is_onsite, property_id, property:properties(name)")
     .eq("user_id", userId)
     .is("deleted_at", null)
     .order("started_at", { ascending: false })
@@ -187,7 +228,10 @@ export async function getAllLogs(userId: string, limit = 100): Promise<LogEntry[
     id: r.id,
     title: r.title,
     started_at: r.started_at,
+    ended_at: r.ended_at,
     duration_secs: r.duration_secs,
+    description: r.description ?? null,
+    is_onsite: !!r.is_onsite,
     property_id: r.property_id,
     propertyName: r.property?.name ?? null,
   }));
@@ -231,6 +275,53 @@ export async function getMyAutoTimer(userId: string, role: TeamRole): Promise<Au
 export async function setMyAutoTimer(enabled: boolean, defaultTask: string): Promise<{ error: string | null }> {
   const { error } = await supabase.rpc("set_my_auto_timer", { p_enabled: enabled, p_task: defaultTask });
   return { error: error?.message ?? null };
+}
+
+export type TaskType = { id: string; name: string; sort_order: number };
+
+export async function getTaskTypes(): Promise<TaskType[]> {
+  const { data } = await supabase
+    .from("task_types")
+    .select("id, name, sort_order")
+    .order("sort_order", { ascending: true });
+  return data ?? [];
+}
+
+export async function createTaskType(
+  userId: string,
+  name: string,
+  sortOrder: number,
+): Promise<TaskType | null> {
+  const { data } = await supabase
+    .from("task_types")
+    .insert({ user_id: userId, name, sort_order: sortOrder })
+    .select("id, name, sort_order")
+    .single();
+  return data;
+}
+
+/** Get today's total logged seconds for a user. */
+export async function getTodaySeconds(userId: string): Promise<number> {
+  const today = new Date();
+  today.setHours(0, 0, 0, 0);
+  const { data } = await supabase
+    .from("time_logs")
+    .select("duration_secs")
+    .eq("user_id", userId)
+    .is("deleted_at", null)
+    .gte("started_at", today.toISOString());
+  return (data ?? []).reduce((sum, r) => sum + (r.duration_secs ?? 0), 0);
+}
+
+/** Update the description (notes) on an active timer. */
+export async function updateActiveTimerDescription(
+  timerId: string,
+  description: string | null,
+): Promise<void> {
+  await supabase
+    .from("active_timers")
+    .update({ description })
+    .eq("id", timerId);
 }
 
 export async function createProperty(

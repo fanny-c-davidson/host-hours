@@ -6,14 +6,14 @@ import { useAuth } from "@/lib/auth";
 import { LockGate } from "@/components/lock-gate";
 import { registerForPush } from "@/lib/push";
 import { syncGeofences } from "@/lib/geofence";
-import { colors, fonts } from "@/theme/tokens";
+import { colors, fonts, space } from "@/theme/tokens";
 
-// Protected tab navigator (mirrors the web dock).
+// Protected tab navigator — mirrors the web Dock.
+// Tab order: Home, Hours, Log (center FAB), Properties, Settings
 export default function AppLayout() {
   const { session, loading } = useAuth();
 
-  // Once signed in: register the push token and reconcile geofences (no-op on
-  // web / if auto-timer is off or permission is denied).
+  // Once signed in: register the push token and reconcile geofences.
   useEffect(() => {
     const uid = session?.user.id;
     if (!uid) return;
@@ -32,39 +32,86 @@ export default function AppLayout() {
 
   return (
     <LockGate>
-    <Tabs
-      screenOptions={{
-        headerShown: false,
-        tabBarActiveTintColor: colors.plum,
-        tabBarInactiveTintColor: colors.slate,
-        tabBarStyle: { backgroundColor: colors.cream, borderTopColor: colors.chalk } as any,
-        tabBarLabelStyle: { fontFamily: fonts.mono, fontSize: 9, letterSpacing: 1, textTransform: "uppercase" },
-      }}
-    >
-      <Tabs.Screen
-        name="dashboard"
-        options={{ title: "Home", tabBarIcon: ({ color, size }) => <Ionicons name="home-outline" color={color} size={size} /> }}
-      />
-      <Tabs.Screen
-        name="timer"
-        options={{ title: "Timer", tabBarIcon: ({ color, size }) => <Ionicons name="time-outline" color={color} size={size} /> }}
-      />
-      <Tabs.Screen
-        name="log"
-        options={{ title: "Log", tabBarIcon: ({ color, size }) => <Ionicons name="add-circle-outline" color={color} size={size} /> }}
-      />
-      <Tabs.Screen
-        name="reports"
-        options={{ title: "Reports", tabBarIcon: ({ color, size }) => <Ionicons name="bar-chart-outline" color={color} size={size} /> }}
-      />
-      <Tabs.Screen
-        name="settings"
-        options={{ title: "Settings", tabBarIcon: ({ color, size }) => <Ionicons name="person-outline" color={color} size={size} /> }}
-      />
-      {/* Reached from Settings, not shown in the tab bar */}
-      <Tabs.Screen name="properties" options={{ href: null }} />
-      <Tabs.Screen name="property-new" options={{ href: null }} />
-    </Tabs>
+      <Tabs
+        screenOptions={{
+          headerShown: false,
+          tabBarActiveTintColor: colors.plum,
+          tabBarInactiveTintColor: colors.slate,
+          tabBarStyle: {
+            backgroundColor: colors.cream,
+            borderTopWidth: 1,
+            borderTopColor: colors.chalk,
+            paddingTop: space(1),
+          } as any,
+          tabBarLabelStyle: {
+            fontFamily: fonts.mono,
+            fontSize: 9,
+            letterSpacing: 1.5,
+            textTransform: "uppercase",
+          },
+        }}
+      >
+        <Tabs.Screen
+          name="dashboard"
+          options={{
+            title: "Home",
+            tabBarIcon: ({ color, size }) => (
+              <Ionicons name="home-outline" color={color} size={size} />
+            ),
+          }}
+        />
+        <Tabs.Screen
+          name="reports"
+          options={{
+            title: "Hours",
+            tabBarIcon: ({ color, size }) => (
+              <Ionicons name="bar-chart-outline" color={color} size={size} />
+            ),
+          }}
+        />
+        <Tabs.Screen
+          name="log"
+          options={{
+            title: "Log",
+            tabBarIcon: ({ focused, size }) => (
+              <View
+                style={{
+                  width: 40,
+                  height: 40,
+                  borderRadius: 20,
+                  backgroundColor: colors.plum,
+                  alignItems: "center",
+                  justifyContent: "center",
+                  marginBottom: 16,
+                }}
+              >
+                <Ionicons name="add" color={colors.cream} size={20} />
+              </View>
+            ),
+          }}
+        />
+        <Tabs.Screen
+          name="properties"
+          options={{
+            title: "Properties",
+            tabBarIcon: ({ color, size }) => (
+              <Ionicons name="business-outline" color={color} size={size} />
+            ),
+          }}
+        />
+        <Tabs.Screen
+          name="settings"
+          options={{
+            title: "Settings",
+            tabBarIcon: ({ color, size }) => (
+              <Ionicons name="settings-outline" color={color} size={size} />
+            ),
+          }}
+        />
+        {/* Hidden screens — reachable via navigation but not shown in the tab bar */}
+        <Tabs.Screen name="timer" options={{ href: null }} />
+        <Tabs.Screen name="property-new" options={{ href: null }} />
+      </Tabs>
     </LockGate>
   );
 }
