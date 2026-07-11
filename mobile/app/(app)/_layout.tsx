@@ -116,6 +116,7 @@ export default function AppLayout() {
         <Tabs.Screen name="settings-password" options={{ href: null }} />
         <Tabs.Screen name="settings-tax" options={{ href: null }} />
         <Tabs.Screen name="settings-contact" options={{ href: null }} />
+        <Tabs.Screen name="settings-billing" options={{ href: null }} />
       </Tabs>
     </LockGate>
   );

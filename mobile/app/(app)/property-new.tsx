@@ -4,7 +4,14 @@ import { SafeAreaView } from "react-native-safe-area-context";
 import { Ionicons } from "@expo/vector-icons";
 import { useFocusEffect, useRouter } from "expo-router";
 import { useAuth } from "@/lib/auth";
-import { canWriteProperties, createProperty, getMyRole } from "@/lib/db";
+import {
+  canWriteProperties,
+  countActiveProperties,
+  createProperty,
+  getActiveTier,
+  getMyRole,
+  PLAN_MAX_PROPERTIES,
+} from "@/lib/db";
 import { AddressInput } from "@/components/address-input";
 import { MetricLabel, SectionLabel } from "@/components/app-ui";
 import { colors, fonts, radius, space } from "@/theme/tokens";
@@ -36,6 +43,15 @@ export default function NewPropertyScreen() {
     setError(null);
     if (!name.trim()) return setError("Give the property a name.");
     setBusy(true);
+    // Plan gate (mirrors web requirePropertySlot): starter caps at 3 properties.
+    const [tier, count] = await Promise.all([getActiveTier(uid!), countActiveProperties()]);
+    const max = PLAN_MAX_PROPERTIES[tier ?? "starter"];
+    if (count >= max) {
+      setBusy(false);
+      return setError(
+        `Your plan allows up to ${max} properties. Upgrade your plan on the web to add more.`,
+      );
+    }
     const { error } = await createProperty(uid!, name, address, color, coords);
     setBusy(false);
     if (error) return setError(error);

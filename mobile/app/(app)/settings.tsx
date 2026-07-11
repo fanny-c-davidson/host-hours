@@ -201,6 +201,14 @@ export default function SettingsScreen() {
           </Pressable>
         )}
 
+        {/* Billing — owner only (matches web permission matrix) */}
+        {role === "owner" && (
+          <Pressable onPress={() => router.push("/settings-billing")} style={rowLink}>
+            <Text style={{ fontFamily: fonts.serif, fontSize: 16, color: colors.char }}>Plan & billing</Text>
+            <Ionicons name="chevron-forward" size={18} color={colors.stone} />
+          </Pressable>
+        )}
+
         <Pressable onPress={() => router.push("/settings-password")} style={rowLink}>
           <Text style={{ fontFamily: fonts.serif, fontSize: 16, color: colors.char }}>Change password</Text>
           <Ionicons name="chevron-forward" size={18} color={colors.stone} />

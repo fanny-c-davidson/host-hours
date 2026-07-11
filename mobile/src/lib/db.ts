@@ -172,6 +172,34 @@ export async function getTimeLog(logId: string) {
   } | null;
 }
 
+// ── Plans (mirrors web src/lib/constants.ts PLAN_LIMITS) ─────────────────────
+export type PlanTier = "starter" | "pro" | "business";
+
+export const PLAN_MAX_PROPERTIES: Record<PlanTier, number> = {
+  starter: 3,
+  pro: Infinity,
+  business: Infinity,
+};
+
+/** The caller's active tier, or null if no active subscription. */
+export async function getActiveTier(userId: string): Promise<PlanTier | null> {
+  const { data } = await supabase
+    .from("subscriptions")
+    .select("tier_id, status")
+    .eq("user_id", userId)
+    .in("status", ["active", "trialing"])
+    .maybeSingle();
+  return (data?.tier_id as PlanTier) ?? null;
+}
+
+export async function countActiveProperties(): Promise<number> {
+  const { count } = await supabase
+    .from("properties")
+    .select("id", { count: "exact", head: true })
+    .is("deleted_at", null);
+  return count ?? 0;
+}
+
 export async function updateProfileName(
   userId: string,
   fullName: string,
