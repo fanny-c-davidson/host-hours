@@ -18,27 +18,41 @@ type PushMessage = {
   data?: Record<string, unknown>;
 };
 
-async function sendExpoPush(messages: PushMessage[]): Promise<{ badTokens: string[] }> {
+async function sendExpoPush(
+  messages: PushMessage[],
+): Promise<{ badTokens: string[]; deliveredIdx: Set<number> }> {
   const badTokens: string[] = [];
+  // Indexes (into `messages`) that Expo accepted, or that are pointless to
+  // retry (dead token). Transient failures stay unmarked so the next cron run
+  // retries them instead of consuming the once-per-timer reminder.
+  const deliveredIdx = new Set<number>();
   // Expo accepts up to 100 messages per request.
   for (let i = 0; i < messages.length; i += 100) {
     const chunk = messages.slice(i, i + 100);
-    const res = await fetch("https://exp.host/--/api/v2/push/send", {
-      method: "POST",
-      headers: { "Content-Type": "application/json" },
-      body: JSON.stringify(chunk),
-    });
+    let res: Response;
+    try {
+      res = await fetch("https://exp.host/--/api/v2/push/send", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify(chunk),
+      });
+    } catch {
+      continue;
+    }
     if (!res.ok) continue;
     const { data } = (await res.json()) as {
       data?: { status: string; details?: { error?: string } }[];
     };
     data?.forEach((ticket, idx) => {
-      if (ticket.status === "error" && ticket.details?.error === "DeviceNotRegistered") {
+      if (ticket.status === "ok") {
+        deliveredIdx.add(i + idx);
+      } else if (ticket.details?.error === "DeviceNotRegistered") {
         badTokens.push(chunk[idx].to);
+        deliveredIdx.add(i + idx); // token is dead — retrying can't succeed
       }
     });
   }
-  return { badTokens };
+  return { badTokens, deliveredIdx };
 }
 
 export async function GET(req: NextRequest) {
@@ -69,16 +83,20 @@ export async function GET(req: NextRequest) {
   const tokenByUser = new Map((profiles ?? []).map((p) => [p.id, p.expo_push_token as string]));
 
   const messages: PushMessage[] = [];
+  const timerIdByMessage: string[] = [];
   const remindedTimerIds: string[] = [];
   for (const t of timers) {
     const token = tokenByUser.get(t.user_id);
-    // No push token (web-only user) still gets reminder_sent_at stamped so we
-    // don't re-scan the same timer every run.
-    remindedTimerIds.push(t.id);
-    if (!token) continue;
+    if (!token) {
+      // No push token (web-only user): stamp so we don't re-scan the same
+      // timer every run — there's nothing to deliver.
+      remindedTimerIds.push(t.id);
+      continue;
+    }
     const hours = Math.round((Date.now() - new Date(t.started_at).getTime()) / 3600_000);
     const prop = t.property as { name: string } | { name: string }[] | null;
     const propName = (Array.isArray(prop) ? prop[0]?.name : prop?.name) ?? "a property";
+    timerIdByMessage.push(t.id);
     messages.push({
       to: token,
       title: "Timer still running",
@@ -87,7 +105,12 @@ export async function GET(req: NextRequest) {
     });
   }
 
-  const { badTokens } = messages.length ? await sendExpoPush(messages) : { badTokens: [] };
+  const { badTokens, deliveredIdx } = messages.length
+    ? await sendExpoPush(messages)
+    : { badTokens: [], deliveredIdx: new Set<number>() };
+  // Only stamp timers whose push Expo actually accepted (or whose token is
+  // dead) — a transient Expo failure must not consume the one reminder.
+  deliveredIdx.forEach((idx) => remindedTimerIds.push(timerIdByMessage[idx]));
 
   await db
     .from("active_timers")

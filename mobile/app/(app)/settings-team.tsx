@@ -107,8 +107,8 @@ export default function TeamScreen() {
             ) : (
               team.members.map((m) => {
                 const name =
-                  m.memberName ??
-                  `${m.first_name ?? ""} ${m.last_name ?? ""}`.trim() ??
+                  m.memberName ||
+                  `${m.first_name ?? ""} ${m.last_name ?? ""}`.trim() ||
                   m.email;
                 return (
                   <Pressable

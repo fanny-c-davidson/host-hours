@@ -54,6 +54,9 @@ if (Platform.OS !== "web")
     if (existing) return; // already running for this property
     const role = await getMyRole(uid);
     const at = await getMyAutoTimer(uid, role);
+    // The setting may have been turned off (e.g. on the web) since the fences
+    // were registered — they only get unregistered the next time the app opens.
+    if (!at.enabled) return;
     const { error: startErr } = await startTimer(uid, propertyId, at.defaultTask || "Auto-timer");
     if (!startErr) {
       const name = await propertyName(propertyId);
@@ -105,11 +108,16 @@ export async function syncGeofences(userId: string): Promise<GeofenceStatus> {
     return { ok: false, reason: "permission" };
   }
 
-  const props = await getGeoProperties();
+  let props = await getGeoProperties();
   if (props.length === 0) {
     await stop();
     return { ok: false, reason: "no-properties" };
   }
+
+  // iOS caps monitored regions (~20 per app); exceeding it rejects the whole
+  // registration and would silently kill the auto-timer for every property.
+  const MAX_REGIONS = 20;
+  if (props.length > MAX_REGIONS) props = props.slice(0, MAX_REGIONS);
 
   await Location.startGeofencingAsync(
     GEOFENCE_TASK,

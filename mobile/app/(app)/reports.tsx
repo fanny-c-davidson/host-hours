@@ -6,7 +6,7 @@ import { useAuth } from "@/lib/auth";
 import { API_URL, emailCsvReport } from "@/lib/web-api";
 import {
   getAllLogs,
-  getMyRole,
+  getMyTeamOwner,
   getProfile,
   getTeamMembers,
   getYearSeconds,
@@ -79,13 +79,15 @@ export default function ReportsScreen() {
       let active = true;
       async function load() {
         if (!uid) return;
-        const r = await getMyRole(uid);
+        // Team rows live under the owner's id — a spouse querying with their
+        // own uid would always see an empty team.
+        const { ownerId, role: r } = await getMyTeamOwner(uid);
         const profile = await getProfile(uid);
         const ty = profile?.tax_year ?? new Date().getFullYear();
         const [secs, allLogs, members] = await Promise.all([
           getYearSeconds(uid, ty),
           getAllLogs(uid),
-          r === "owner" || r === "spouse" ? getTeamMembers(uid) : Promise.resolve([]),
+          r === "owner" || r === "spouse" ? getTeamMembers(ownerId) : Promise.resolve([]),
         ]);
         if (!active) return;
         setRole(r);

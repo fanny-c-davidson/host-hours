@@ -5,7 +5,11 @@ export async function POST(req: NextRequest) {
   const user = await getUserFromRequest(req);
   if (!user) return new NextResponse("Unauthorized", { status: 401 });
 
-  const { csv, email, property } = await req.json();
+  const { csv, property } = await req.json();
+
+  // Always deliver to the authenticated account's own address — honoring a
+  // client-supplied recipient would make this a spam relay.
+  const email = user.email;
 
   if (!csv || !email) {
     return NextResponse.json({ error: "Missing fields" }, { status: 400 });

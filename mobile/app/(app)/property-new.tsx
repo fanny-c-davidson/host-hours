@@ -10,7 +10,7 @@ import {
   createProperty,
   getActiveTier,
   getMyRole,
-  PLAN_MAX_PROPERTIES,
+  maxPropertiesForTier,
 } from "@/lib/db";
 import { AddressInput } from "@/components/address-input";
 import { MetricLabel, SectionLabel } from "@/components/app-ui";
@@ -44,8 +44,8 @@ export default function NewPropertyScreen() {
     if (!name.trim()) return setError("Give the property a name.");
     setBusy(true);
     // Plan gate (mirrors web requirePropertySlot): starter caps at 3 properties.
-    const [tier, count] = await Promise.all([getActiveTier(uid!), countActiveProperties()]);
-    const max = PLAN_MAX_PROPERTIES[tier ?? "starter"];
+    const [tier, count] = await Promise.all([getActiveTier(uid!), countActiveProperties(uid!)]);
+    const max = maxPropertiesForTier(tier);
     if (count >= max) {
       setBusy(false);
       return setError(

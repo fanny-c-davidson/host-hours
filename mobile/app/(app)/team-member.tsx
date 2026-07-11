@@ -179,7 +179,7 @@ export default function TeamMemberScreen() {
         {member && (
           <>
             <Text style={{ fontFamily: fonts.serif, fontSize: 28, color: colors.plum, marginBottom: space(1) }}>
-              {member.memberName ?? `${member.first_name ?? ""} ${member.last_name ?? ""}`.trim() ?? member.email}
+              {member.memberName || `${member.first_name ?? ""} ${member.last_name ?? ""}`.trim() || member.email}
             </Text>
             <Text style={{ fontSize: 13, color: colors.slate, marginBottom: space(6) }}>
               {member.status === "pending" ? "Invitation pending" : "Active member"}

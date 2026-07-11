@@ -175,27 +175,39 @@ export async function getTimeLog(logId: string) {
 // ── Plans (mirrors web src/lib/constants.ts PLAN_LIMITS) ─────────────────────
 export type PlanTier = "starter" | "pro" | "business";
 
-export const PLAN_MAX_PROPERTIES: Record<PlanTier, number> = {
+const PLAN_MAX_PROPERTIES: Record<PlanTier, number> = {
   starter: 3,
   pro: Infinity,
   business: Infinity,
 };
 
-/** The caller's active tier, or null if no active subscription. */
-export async function getActiveTier(userId: string): Promise<PlanTier | null> {
+/**
+ * Property cap for a tier. Unknown/legacy tiers (e.g. the signup trigger's
+ * "free") get the starter cap — fail closed like the web's requirePropertySlot,
+ * never open.
+ */
+export function maxPropertiesForTier(tier: string | null): number {
+  return PLAN_MAX_PROPERTIES[(tier ?? "starter") as PlanTier] ?? PLAN_MAX_PROPERTIES.starter;
+}
+
+/** The caller's active tier id, or null if no active subscription. */
+export async function getActiveTier(userId: string): Promise<string | null> {
   const { data } = await supabase
     .from("subscriptions")
     .select("tier_id, status")
     .eq("user_id", userId)
     .in("status", ["active", "trialing"])
     .maybeSingle();
-  return (data?.tier_id as PlanTier) ?? null;
+  return data?.tier_id ?? null;
 }
 
-export async function countActiveProperties(): Promise<number> {
+/** The caller's own active property count (same filters as web countActiveProperties). */
+export async function countActiveProperties(userId: string): Promise<number> {
   const { count } = await supabase
     .from("properties")
     .select("id", { count: "exact", head: true })
+    .eq("user_id", userId)
+    .eq("is_archived", false)
     .is("deleted_at", null);
   return count ?? 0;
 }
@@ -270,6 +282,7 @@ export async function getMyRole(userId: string): Promise<TeamRole> {
     .select("role")
     .eq("member_id", userId)
     .eq("status", "active")
+    .neq("owner_id", userId) // a self-membership row must not demote the owner
     .limit(1)
     .maybeSingle();
   return (data?.role as TeamRole) ?? "owner";
@@ -299,15 +312,26 @@ export async function createLog(
   return { id: data?.id ?? null, error: error?.message ?? null };
 }
 
-export async function getAllLogs(userId: string, limit = 100): Promise<LogEntry[]> {
-  const { data } = await supabase
-    .from("time_logs")
-    .select("id, title, started_at, ended_at, duration_secs, description, is_onsite, property_id, property:properties(name)")
-    .eq("user_id", userId)
-    .is("deleted_at", null)
-    .order("started_at", { ascending: false })
-    .limit(limit);
-  return (data ?? []).map((r: any) => ({
+/**
+ * Every non-deleted log for the user. Pages through Supabase's per-request row
+ * cap so the reports/export screens see the complete history — a truncated set
+ * would silently produce a wrong CSV total.
+ */
+export async function getAllLogs(userId: string): Promise<LogEntry[]> {
+  const PAGE = 1000;
+  const rows: any[] = [];
+  for (let from = 0; ; from += PAGE) {
+    const { data } = await supabase
+      .from("time_logs")
+      .select("id, title, started_at, ended_at, duration_secs, description, is_onsite, property_id, property:properties(name)")
+      .eq("user_id", userId)
+      .is("deleted_at", null)
+      .order("started_at", { ascending: false })
+      .range(from, from + PAGE - 1);
+    rows.push(...(data ?? []));
+    if (!data || data.length < PAGE) break;
+  }
+  return rows.map((r: any) => ({
     id: r.id,
     title: r.title,
     started_at: r.started_at,
