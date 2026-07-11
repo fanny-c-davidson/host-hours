@@ -58,7 +58,7 @@ function LoginInner() {
       return;
     }
 
-    router.push(next?.startsWith("/") ? next : "/dashboard");
+    router.push(next && next.startsWith("/") && !next.startsWith("//") ? next : "/dashboard");
   }
 
   return (

@@ -79,7 +79,7 @@ export async function updateSession(request: NextRequest) {
   // when already signed in. Respect the `next` param if present.
   if (user && (pathname === '/login' || pathname === '/signup')) {
     const next = searchParams.get('next');
-    const target = next?.startsWith('/') ? next : '/dashboard';
+    const target = next && next.startsWith('/') && !next.startsWith('//') ? next : '/dashboard';
     return NextResponse.redirect(new URL(target, request.url));
   }
 
