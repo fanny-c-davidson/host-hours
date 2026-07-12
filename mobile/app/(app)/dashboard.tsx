@@ -606,13 +606,17 @@ function TimeRangeBar({ entry, onSave }: { entry: LogGroup["entries"][0]; onSave
     const hhmm = parseTimeInput(raw);
     if (!hhmm) { setEditField(null); return; }
     const dateStr = localDateStr(entry.started_at);
-    let st = field === "start" ? hhmm : startT;
-    let en = field === "end" ? hhmm : endT;
-    if (st > en) { const tmp = st; st = en; en = tmp; }
+    const st = field === "start" ? hhmm : startT;
+    const en = field === "end" ? hhmm : endT;
     setStartT(st);
     setEndT(en);
     const newStart = new Date(`${dateStr}T${st}:00`);
-    const newEnd = new Date(`${dateStr}T${en}:00`);
+    let newEnd = new Date(`${dateStr}T${en}:00`);
+    // An end before the start means the session ran past midnight — roll the
+    // end to the next day (matches the web editor) instead of swapping fields.
+    if (newEnd.getTime() < newStart.getTime()) {
+      newEnd = new Date(newEnd.getTime() + 24 * 60 * 60 * 1000);
+    }
     setEditField(null);
     onSave(entry.id, { started_at: newStart.toISOString(), ended_at: newEnd.toISOString() });
   }

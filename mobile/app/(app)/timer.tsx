@@ -369,13 +369,17 @@ export default function TimerScreen() {
     if (!hhmm) return;
     const d = new Date(stoppedEntry.started_at);
     const dateStr = `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, "0")}-${String(d.getDate()).padStart(2, "0")}`;
-    let st = field === "start" ? hhmm : stoppedStartTime;
-    let en = field === "end" ? hhmm : stoppedEndTime;
-    if (st > en) { const tmp = st; st = en; en = tmp; }
+    const st = field === "start" ? hhmm : stoppedStartTime;
+    const en = field === "end" ? hhmm : stoppedEndTime;
     setStoppedStartTime(st);
     setStoppedEndTime(en);
     const newStart = new Date(`${dateStr}T${st}:00`);
-    const newEnd = new Date(`${dateStr}T${en}:00`);
+    let newEnd = new Date(`${dateStr}T${en}:00`);
+    // An end before the start means the session ran past midnight — roll the
+    // end to the next day (matches the web editor) instead of swapping fields.
+    if (newEnd.getTime() < newStart.getTime()) {
+      newEnd = new Date(newEnd.getTime() + 24 * 60 * 60 * 1000);
+    }
     saveStoppedField({ started_at: newStart.toISOString(), ended_at: newEnd.toISOString() });
   }
 

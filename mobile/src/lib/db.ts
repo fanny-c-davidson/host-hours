@@ -252,7 +252,16 @@ export async function updateTimeLog(
   logId: string,
   fields: { description?: string | null; is_onsite?: boolean; started_at?: string; ended_at?: string },
 ): Promise<{ error: string | null }> {
-  const { error } = await supabase.from("time_logs").update(fields).eq("id", logId);
+  // duration_secs is a regular column (not generated — see migration 002), so
+  // a time change must recompute it or the hours totals go stale.
+  let payload: Record<string, unknown> = { ...fields };
+  if (fields.started_at && fields.ended_at) {
+    payload.duration_secs = Math.max(
+      0,
+      Math.floor((new Date(fields.ended_at).getTime() - new Date(fields.started_at).getTime()) / 1000),
+    );
+  }
+  const { error } = await supabase.from("time_logs").update(payload).eq("id", logId);
   return { error: error?.message ?? null };
 }
 
