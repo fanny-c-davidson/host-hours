@@ -193,6 +193,7 @@ export default function ReportsScreen() {
   const [expandedKey, setExpandedKey] = useState<string | null>(null);
   const [emailing, setEmailing] = useState(false);
   const [emailStatus, setEmailStatus] = useState<string | null>(null);
+  const [pdfYear, setPdfYear] = useState(new Date().getFullYear());
 
   const refreshLogs = useCallback(async () => {
     if (!uid) return;
@@ -227,21 +228,31 @@ export default function ReportsScreen() {
         setCohostName(cohost?.name ?? null);
 
         // Cohost logs (RLS lets spouses read each other's entries, like web).
-        if (cohost) {
-          getAllLogs(cohost.memberId).then((l) => active && setCohostLogs(l));
-        }
+        const cohostAll = cohost ? await getAllLogs(cohost.memberId) : [];
+        if (!active) return;
+        setCohostLogs(cohostAll);
 
-        // Team tab: show the roster immediately; per-member hours come from the
-        // web bridge and fill in when it responds (or stay 0 if unreachable) —
-        // the screen must never block on a network call to the web app.
+        // Team tab. RLS lets us compute our own + the cohost's hours directly;
+        // helpers'/managers' hours need the web bridge (service role) and fill
+        // in when it responds — the screen never blocks on that network call.
         if (!staff) {
           const members = await getTeamMembers(ownerId);
           if (!active) return;
+          // The owner's real first name (web shows "Fanny", not "Owner").
+          let ownerName = profile?.full_name?.split(" ")[0] || "You";
+          if (ownerId !== uid) {
+            const ownerProfile = await getProfile(ownerId).catch(() => null);
+            ownerName = ownerProfile?.full_name?.split(" ")[0] || cohost?.name || "Owner";
+          }
+          const totalSecs = (l: LogEntry[]) => l.reduce((s, e) => s + e.duration_secs, 0);
+          const localSeconds: Record<string, number> = { [uid]: totalSecs(allLogs) };
+          if (cohost) localSeconds[cohost.memberId] = totalSecs(cohostAll);
+
           const buildTeam = (seconds: Record<string, number>): TeamRow[] => {
             const hoursFor = (id: string | null) => (id ? (seconds[id] ?? 0) / 3600 : 0);
             return [
               {
-                name: ownerId === uid ? (profile?.full_name?.split(" ")[0] || "You") : "Owner",
+                name: ownerName,
                 role: "owner" as TeamRole,
                 display_role: null,
                 hours: hoursFor(ownerId),
@@ -258,13 +269,14 @@ export default function ReportsScreen() {
                 })),
             ];
           };
-          setTeam(members.length > 0 ? buildTeam({}) : []);
+          setTeam(members.length > 0 ? buildTeam(localSeconds) : []);
           if (members.length > 0) {
             getTeamHours(ownerId)
               .then((res) => {
-                if (active && res.data) setTeam(buildTeam(res.data));
+                // Bridge values win where present (covers staff members too).
+                if (active && res.data) setTeam(buildTeam({ ...localSeconds, ...res.data }));
               })
-              .catch(() => {}); // bridge offline — roster stays at 0h
+              .catch(() => {}); // bridge offline — staff rows stay at 0h
           }
         }
         setLoading(false);
@@ -355,7 +367,7 @@ export default function ReportsScreen() {
     { key: "activity", label: "Activity" },
     ...(staff ? [] : [
       { key: "team" as Tab, label: "Team" },
-      { key: "export" as Tab, label: "Export" },
+      { key: "export" as Tab, label: "Reports" },
     ]),
   ];
   const title = tab === "hours" ? "My Hours" : tab === "activity" ? "Activity" : tab === "team" ? "Team" : "Reports";
@@ -566,60 +578,104 @@ export default function ReportsScreen() {
           )
         )}
 
-        {/* ── Export tab ───────────────────────────────────────── */}
+        {/* ── Reports (export) tab — mirrors web layout ───────── */}
         {tab === "export" && (
           hasData ? (
-            <View style={{ padding: space(7), gap: space(4) }}>
-              <View style={{ borderWidth: 1, borderColor: colors.chalk, borderRadius: radius.md, padding: space(5) }}>
-                <Text style={{ fontFamily: fonts.mono, fontSize: 10, letterSpacing: 1.5, textTransform: "uppercase", color: colors.quill, fontWeight: "500", marginBottom: space(2) }}>
-                  Tax report PDF
-                </Text>
-                <Text style={{ fontSize: 13, color: colors.slate, marginBottom: space(4), lineHeight: 19 }}>
-                  The full tax report PDF (with property breakdowns and receipt thumbnails) is generated on the web app.
-                </Text>
-                <Pressable
-                  onPress={() => Linking.openURL(`${API_URL}/reports?tab=export`)}
-                  style={{ minHeight: 48, borderRadius: radius.md, backgroundColor: colors.plum, alignItems: "center", justifyContent: "center" }}
-                >
-                  <Text style={{ color: colors.cream, fontSize: 14, fontWeight: "500" }}>Open tax report on the web</Text>
-                </Pressable>
-              </View>
+            <>
+              <PropertyFilter
+                {...filterProps}
+                cohostName={cohostName}
+                showCombined={showCombined}
+                onToggleCombined={cohostName ? () => setShowCombined(!showCombined) : undefined}
+              />
 
-              <View style={{ borderWidth: 1, borderColor: colors.chalk, borderRadius: radius.md, padding: space(5) }}>
-                <Text style={{ fontFamily: fonts.mono, fontSize: 10, letterSpacing: 1.5, textTransform: "uppercase", color: colors.quill, fontWeight: "500", marginBottom: space(2) }}>
-                  All activities
-                </Text>
-                <Text style={{ fontSize: 13, color: colors.slate, marginBottom: space(4), lineHeight: 19 }}>
-                  Email yourself a CSV of every logged activity.
-                </Text>
-                <Pressable
-                  onPress={async () => {
-                    const email = session?.user.email;
-                    if (!email) return;
-                    setEmailing(true);
-                    setEmailStatus(null);
-                    const { error } = await emailCsvReport(logsToCsv(logs), email, "All properties");
-                    setEmailing(false);
-                    setEmailStatus(error ? error : "Report sent to your email.");
-                  }}
-                  disabled={emailing}
-                  style={{ minHeight: 48, borderRadius: radius.md, borderWidth: 1, borderColor: colors.chalk, alignItems: "center", justifyContent: "center", opacity: emailing ? 0.6 : 1 }}
-                >
-                  {emailing ? (
-                    <ActivityIndicator color={colors.plum} />
-                  ) : (
-                    <Text style={{ fontFamily: fonts.mono, fontSize: 11, letterSpacing: 1.5, textTransform: "uppercase", color: colors.quill, fontWeight: "500" }}>
-                      Email All Activities CSV
+              <View style={{ paddingHorizontal: space(7), paddingVertical: space(7), gap: space(4) }}>
+                {/* Tax year pills */}
+                <View>
+                  <Text style={{ fontFamily: fonts.mono, fontSize: 10, letterSpacing: 1.5, textTransform: "uppercase", color: colors.quill, fontWeight: "500", marginBottom: space(2) }}>
+                    Tax year
+                  </Text>
+                  <View style={{ flexDirection: "row", flexWrap: "wrap", gap: space(2) }}>
+                    {(() => {
+                      const years = Array.from(
+                        new Set([
+                          ...logs.map((e) => new Date(e.started_at).getFullYear()),
+                          ...(showCombined ? cohostLogs.map((e) => new Date(e.started_at).getFullYear()) : []),
+                        ]),
+                      ).sort((a, b) => b - a);
+                      if (years.length === 0) years.push(new Date().getFullYear());
+                      return years.map((yr) => (
+                        <Pressable
+                          key={yr}
+                          onPress={() => setPdfYear(yr)}
+                          style={{
+                            paddingHorizontal: space(4),
+                            paddingVertical: space(2),
+                            borderRadius: radius.pill,
+                            borderWidth: 1,
+                            borderColor: pdfYear === yr ? colors.plum : colors.chalk,
+                            backgroundColor: pdfYear === yr ? colors.plum : colors.cream,
+                          }}
+                        >
+                          <Text style={{ fontSize: 12, fontWeight: "500", color: pdfYear === yr ? colors.cream : colors.quill }}>
+                            {yr}
+                          </Text>
+                        </Pressable>
+                      ));
+                    })()}
+                  </View>
+                </View>
+
+                {/* Download tax PDF — generated on the web, opens there */}
+                <View>
+                  <Pressable
+                    onPress={() => Linking.openURL(`${API_URL}/reports?tab=export`)}
+                    style={{ minHeight: 48, borderRadius: radius.md, backgroundColor: colors.plum, flexDirection: "row", alignItems: "center", justifyContent: "center", gap: space(2) }}
+                  >
+                    <Ionicons name="download-outline" size={16} color={colors.cream} />
+                    <Text style={{ fontFamily: fonts.mono, fontSize: 11, letterSpacing: 1.5, textTransform: "uppercase", color: colors.cream, fontWeight: "500" }}>
+                      Download {pdfYear} Tax Report PDF
+                    </Text>
+                  </Pressable>
+                  <Text style={{ fontSize: 11, color: colors.slate, textAlign: "center", marginTop: space(2) }}>
+                    Opens the web app, where the PDF (with receipt thumbnails) is generated.
+                  </Text>
+                </View>
+
+                {/* All activities CSV */}
+                <View style={{ borderTopWidth: 1, borderTopColor: colors.chalk, paddingTop: space(4) }}>
+                  <Text style={{ fontFamily: fonts.mono, fontSize: 10, letterSpacing: 1.5, textTransform: "uppercase", color: colors.quill, fontWeight: "500", marginBottom: space(2) }}>
+                    All activities
+                  </Text>
+                  <Pressable
+                    onPress={async () => {
+                      const email = session?.user.email;
+                      if (!email) return;
+                      setEmailing(true);
+                      setEmailStatus(null);
+                      const { error } = await emailCsvReport(logsToCsv(filtered), email, activeProp);
+                      setEmailing(false);
+                      setEmailStatus(error ? error : "Report sent to your email.");
+                    }}
+                    disabled={emailing}
+                    style={{ minHeight: 48, borderRadius: radius.md, borderWidth: 1, borderColor: colors.chalk, alignItems: "center", justifyContent: "center", opacity: emailing ? 0.6 : 1 }}
+                  >
+                    {emailing ? (
+                      <ActivityIndicator color={colors.plum} />
+                    ) : (
+                      <Text style={{ fontFamily: fonts.mono, fontSize: 11, letterSpacing: 1.5, textTransform: "uppercase", color: colors.quill, fontWeight: "500" }}>
+                        Email All Activities CSV
+                      </Text>
+                    )}
+                  </Pressable>
+                  {emailStatus && (
+                    <Text style={{ fontSize: 12, color: emailStatus.startsWith("Report sent") ? colors.success : colors.tangerine, textAlign: "center", marginTop: space(2) }}>
+                      {emailStatus}
                     </Text>
                   )}
-                </Pressable>
-                {emailStatus && (
-                  <Text style={{ fontSize: 12, color: emailStatus.startsWith("Report sent") ? colors.success : colors.tangerine, textAlign: "center", marginTop: space(3) }}>
-                    {emailStatus}
-                  </Text>
-                )}
+                </View>
               </View>
-            </View>
+            </>
           ) : (
             <EmptyState
               title="No data yet"
