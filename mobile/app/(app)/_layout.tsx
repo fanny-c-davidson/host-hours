@@ -1,8 +1,8 @@
 import { useEffect } from "react";
 import { Redirect, Tabs } from "expo-router";
 import { ActivityIndicator, View } from "react-native";
-import { Ionicons } from "@expo/vector-icons";
 import { useAuth } from "@/lib/auth";
+import { HomeIcon, HoursIcon, PlusIcon, PropertiesIcon, SettingsIcon } from "@/components/dock-icons";
 import { LockGate } from "@/components/lock-gate";
 import { registerForPush } from "@/lib/push";
 import { syncGeofences } from "@/lib/geofence";
@@ -35,19 +35,27 @@ export default function AppLayout() {
       <Tabs
         screenOptions={{
           headerShown: false,
+          // Matches the web Dock (src/components/dock.tsx): plum active,
+          // slate inactive, mono 9px tracked-out uppercase labels, chalk
+          // hairline on a cream bar.
           tabBarActiveTintColor: colors.plum,
           tabBarInactiveTintColor: colors.slate,
           tabBarStyle: {
             backgroundColor: colors.cream,
             borderTopWidth: 1,
             borderTopColor: colors.chalk,
-            paddingTop: space(1),
+            paddingTop: space(3),
+            height: 84,
+          } as any,
+          tabBarItemStyle: {
+            gap: 4,
           } as any,
           tabBarLabelStyle: {
             fontFamily: fonts.mono,
             fontSize: 9,
-            letterSpacing: 1.5,
+            letterSpacing: 1,
             textTransform: "uppercase",
+            fontWeight: "500",
           },
         }}
       >
@@ -55,25 +63,24 @@ export default function AppLayout() {
           name="dashboard"
           options={{
             title: "Home",
-            tabBarIcon: ({ color, size }) => (
-              <Ionicons name="home-outline" color={color} size={size} />
-            ),
+            tabBarIcon: ({ color }) => <HomeIcon color={color} />,
           }}
         />
         <Tabs.Screen
           name="reports"
           options={{
             title: "Hours",
-            tabBarIcon: ({ color, size }) => (
-              <Ionicons name="bar-chart-outline" color={color} size={size} />
-            ),
+            tabBarIcon: ({ color }) => <HoursIcon color={color} />,
           }}
         />
         <Tabs.Screen
           name="log"
           options={{
             title: "Log",
-            tabBarIcon: ({ focused, size }) => (
+            // Center FAB: 40px plum circle, cream plus — label stays plum like web.
+            tabBarActiveTintColor: colors.plum,
+            tabBarInactiveTintColor: colors.plum,
+            tabBarIcon: () => (
               <View
                 style={{
                   width: 40,
@@ -82,10 +89,15 @@ export default function AppLayout() {
                   backgroundColor: colors.plum,
                   alignItems: "center",
                   justifyContent: "center",
-                  marginBottom: 16,
+                  marginTop: -10,
+                  shadowColor: "#000",
+                  shadowOpacity: 0.12,
+                  shadowRadius: 3,
+                  shadowOffset: { width: 0, height: 1 },
+                  elevation: 2,
                 }}
               >
-                <Ionicons name="add" color={colors.cream} size={20} />
+                <PlusIcon color={colors.cream} />
               </View>
             ),
           }}
@@ -94,18 +106,14 @@ export default function AppLayout() {
           name="properties"
           options={{
             title: "Properties",
-            tabBarIcon: ({ color, size }) => (
-              <Ionicons name="business-outline" color={color} size={size} />
-            ),
+            tabBarIcon: ({ color }) => <PropertiesIcon color={color} />,
           }}
         />
         <Tabs.Screen
           name="settings"
           options={{
             title: "Settings",
-            tabBarIcon: ({ color, size }) => (
-              <Ionicons name="settings-outline" color={color} size={size} />
-            ),
+            tabBarIcon: ({ color }) => <SettingsIcon color={color} />,
           }}
         />
         {/* Hidden screens — reachable via navigation but not shown in the tab bar */}
