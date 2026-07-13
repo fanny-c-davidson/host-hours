@@ -488,6 +488,39 @@ export async function createTaskType(
   return data;
 }
 
+export async function renameTaskType(id: string, name: string): Promise<void> {
+  await supabase.from("task_types").update({ name: name.trim() }).eq("id", id);
+}
+
+export async function deleteTaskType(id: string): Promise<void> {
+  await supabase.from("task_types").delete().eq("id", id);
+}
+
+/** Swap the sort_order of two task types (for ↑/↓ reordering). */
+export async function swapTaskTypeOrder(a: TaskType, b: TaskType): Promise<void> {
+  await Promise.all([
+    supabase.from("task_types").update({ sort_order: b.sort_order }).eq("id", a.id),
+    supabase.from("task_types").update({ sort_order: a.sort_order }).eq("id", b.id),
+  ]);
+}
+
+/** Most recent log timestamp per property, to order "Recent properties" by recency. */
+export async function getLastActivityByProperty(userId: string): Promise<Record<string, number>> {
+  const { data } = await supabase
+    .from("time_logs")
+    .select("property_id, started_at")
+    .eq("user_id", userId)
+    .is("deleted_at", null)
+    .order("started_at", { ascending: false });
+  const map: Record<string, number> = {};
+  for (const l of data ?? []) {
+    if (l.property_id && !(l.property_id in map)) {
+      map[l.property_id] = new Date(l.started_at).getTime();
+    }
+  }
+  return map;
+}
+
 /** Get today's total logged seconds for a user. */
 export async function getTodaySeconds(userId: string): Promise<number> {
   const today = new Date();

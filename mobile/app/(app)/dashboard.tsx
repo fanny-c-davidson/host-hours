@@ -15,6 +15,7 @@ import { Ionicons } from "@expo/vector-icons";
 import { useAuth } from "@/lib/auth";
 import {
   getActiveTimer,
+  getLastActivityByProperty,
   getProfile,
   getProperties,
   getRecentLogs,
@@ -38,6 +39,7 @@ import {
   type LogGroup,
 } from "@/lib/format";
 import { ActivityRow } from "@/components/activity-group";
+import { StartTaskList } from "@/components/start-task-list";
 import { colors, fonts, radius, space } from "@/theme/tokens";
 
 // ---------------------------------------------------------------------------
@@ -213,7 +215,7 @@ function ActiveTimerCard({
     <View
       style={{
         backgroundColor: colors.plum,
-        borderRadius: 12,
+        borderRadius: radius.xl,
         padding: space(5),
         marginBottom: space(4),
       }}
@@ -374,17 +376,21 @@ function ActiveTimerCard({
 function PropertyCard({
   property,
   taskTypes,
+  userId,
   onStartTimer,
+  onTasksChanged,
 }: {
   property: Property;
   taskTypes: TaskType[];
+  userId: string;
   onStartTimer: (propertyId: string, taskName: string) => void;
+  onTasksChanged: () => void;
 }) {
   return (
     <View
       style={{
         backgroundColor: colors.plum,
-        borderRadius: radius.md,
+        borderRadius: radius.xl,
         padding: space(5),
         marginBottom: space(3),
       }}
@@ -418,46 +424,13 @@ function PropertyCard({
         {property.name}
       </Text>
 
-      {/* "Start a task" header */}
-      <View
-        style={{
-          flexDirection: "row",
-          alignItems: "center",
-          gap: space(2),
-          marginBottom: space(3),
-        }}
-      >
-        <Ionicons name="time-outline" size={16} color="rgba(251,248,241,0.7)" />
-        <Text
-          style={{
-            fontFamily: fonts.mono,
-            fontSize: 10,
-            letterSpacing: 1.5,
-            textTransform: "uppercase",
-            color: "rgba(251, 248, 241, 0.6)",
-            fontWeight: "500",
-          }}
-        >
-          Start a task
-        </Text>
-      </View>
-
-      {/* Task type pills */}
-      <View
-        style={{
-          flexDirection: "row",
-          flexWrap: "wrap",
-          gap: space(2),
-        }}
-      >
-        {taskTypes.map((t) => (
-          <TaskPill
-            key={t.id}
-            label={t.name}
-            onPress={() => onStartTimer(property.id, t.name)}
-          />
-        ))}
-      </View>
+      {/* Task pills + inline management (add / rename / delete / reorder) */}
+      <StartTaskList
+        taskTypes={taskTypes}
+        userId={userId}
+        onSelect={(name) => onStartTimer(property.id, name)}
+        onChanged={onTasksChanged}
+      />
     </View>
   );
 }
@@ -627,16 +600,21 @@ export default function DashboardScreen() {
     if (!session) return;
     const uid = session.user.id;
 
-    const [profile, props, tasks, recent, timer] = await Promise.all([
+    const [profile, props, tasks, recent, timer, lastActivity] = await Promise.all([
       getProfile(uid),
       getProperties(),
       getTaskTypes(),
       getRecentLogs(uid, 10),
       getActiveTimer(uid),
+      getLastActivityByProperty(uid),
     ]);
 
     setName(profile?.full_name || session.user.email || "");
-    setProperties(props);
+    // Most recently used property first (drives the featured card + list order,
+    // matching the web dashboard).
+    setProperties(
+      [...props].sort((a, b) => (lastActivity[b.id] ?? 0) - (lastActivity[a.id] ?? 0)),
+    );
     setTaskTypes(tasks);
     setLogs(recent);
     setActiveTimer(timer);
@@ -778,7 +756,9 @@ export default function DashboardScreen() {
             <PropertyCard
               property={properties[0]}
               taskTypes={taskTypes}
+              userId={session!.user.id}
               onStartTimer={handleStartTimer}
+              onTasksChanged={loadData}
             />
           </View>
         )}

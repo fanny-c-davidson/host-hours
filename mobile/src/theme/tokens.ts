@@ -35,5 +35,6 @@ export const fonts = {
   mono: "Courier",
 } as const;
 
-export const radius = { sm: 6, md: 10, pill: 999 } as const;
+// Matches web globals.css --radius-* (sm 8 / md 12 / lg 20 / xl 28).
+export const radius = { sm: 8, md: 12, lg: 20, xl: 28, pill: 999 } as const;
 export const space = (n: number) => n * 4;

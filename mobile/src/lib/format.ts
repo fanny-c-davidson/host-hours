@@ -24,7 +24,7 @@ export function shortDate(iso: string): string {
 export function greeting(date = new Date()): string {
   const h = date.getHours();
   if (h < 12) return "Good morning";
-  if (h < 18) return "Good afternoon";
+  if (h < 17) return "Good afternoon"; // web flips to evening at 5pm
   return "Good evening";
 }
 
