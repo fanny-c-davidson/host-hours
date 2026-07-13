@@ -42,16 +42,25 @@ export type AcceptInvitationResult =
 async function call<T>(payload: Record<string, unknown>): Promise<T> {
   const { data } = await supabase.auth.getSession();
   const token = data.session?.access_token;
-  const res = await fetch(`${API_URL}/api/team`, {
-    method: "POST",
-    headers: {
-      "Content-Type": "application/json",
-      ...(token ? { Authorization: `Bearer ${token}` } : {}),
-    },
-    body: JSON.stringify(payload),
-  });
-  if (!res.ok) throw new Error(`Request failed (${res.status})`);
-  return (await res.json()) as T;
+  // Hard timeout: a hung request must fail, not freeze whichever screen
+  // awaited it (e.g. old server versions redirected API POSTs into limbo).
+  const abort = new AbortController();
+  const timer = setTimeout(() => abort.abort(), 10_000);
+  try {
+    const res = await fetch(`${API_URL}/api/team`, {
+      method: "POST",
+      headers: {
+        "Content-Type": "application/json",
+        ...(token ? { Authorization: `Bearer ${token}` } : {}),
+      },
+      body: JSON.stringify(payload),
+      signal: abort.signal,
+    });
+    if (!res.ok) throw new Error(`Request failed (${res.status})`);
+    return (await res.json()) as T;
+  } finally {
+    clearTimeout(timer);
+  }
 }
 
 type Result<T = undefined> = { data: T | null; error: string | null };

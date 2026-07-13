@@ -231,27 +231,22 @@ export default function ReportsScreen() {
           getAllLogs(cohost.memberId).then((l) => active && setCohostLogs(l));
         }
 
-        // Team tab: roster + per-member hours via the service-role bridge.
+        // Team tab: show the roster immediately; per-member hours come from the
+        // web bridge and fill in when it responds (or stay 0 if unreachable) —
+        // the screen must never block on a network call to the web app.
         if (!staff) {
           const members = await getTeamMembers(ownerId);
-          if (members.length > 0) {
-            let seconds: Record<string, number> = {};
-            try {
-              seconds = (await getTeamHours(ownerId)).data ?? {};
-            } catch {
-              // Offline / bridge unavailable — show the roster with 0h.
-            }
+          if (!active) return;
+          const buildTeam = (seconds: Record<string, number>): TeamRow[] => {
             const hoursFor = (id: string | null) => (id ? (seconds[id] ?? 0) / 3600 : 0);
-            const ownerRow: TeamRow = {
-              name: ownerId === uid ? (profile?.full_name?.split(" ")[0] || "You") : "Owner",
-              role: "owner",
-              display_role: null,
-              hours: hoursFor(ownerId),
-              isYou: ownerId === uid,
-            };
-            if (!active) return;
-            setTeam([
-              ownerRow,
+            return [
+              {
+                name: ownerId === uid ? (profile?.full_name?.split(" ")[0] || "You") : "Owner",
+                role: "owner" as TeamRole,
+                display_role: null,
+                hours: hoursFor(ownerId),
+                isYou: ownerId === uid,
+              },
               ...members
                 .filter((m) => m.member_id !== ownerId)
                 .map((m) => ({
@@ -261,14 +256,20 @@ export default function ReportsScreen() {
                   hours: hoursFor(m.member_id),
                   isYou: m.member_id === uid,
                 })),
-            ]);
-          } else {
-            setTeam([]);
+            ];
+          };
+          setTeam(members.length > 0 ? buildTeam({}) : []);
+          if (members.length > 0) {
+            getTeamHours(ownerId)
+              .then((res) => {
+                if (active && res.data) setTeam(buildTeam(res.data));
+              })
+              .catch(() => {}); // bridge offline — roster stays at 0h
           }
         }
         setLoading(false);
       }
-      load();
+      load().catch(() => setLoading(false));
       return () => {
         active = false;
       };
