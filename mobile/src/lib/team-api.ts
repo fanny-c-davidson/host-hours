@@ -1,5 +1,5 @@
 import { supabase } from "./supabase";
-import { API_URL } from "./web-api";
+import { apiFetch } from "./web-api";
 import type { TeamRole } from "./db";
 
 // Client for the web app's /api/team bridge. Team operations cross account
@@ -42,25 +42,18 @@ export type AcceptInvitationResult =
 async function call<T>(payload: Record<string, unknown>): Promise<T> {
   const { data } = await supabase.auth.getSession();
   const token = data.session?.access_token;
-  // Hard timeout: a hung request must fail, not freeze whichever screen
-  // awaited it (e.g. old server versions redirected API POSTs into limbo).
-  const abort = new AbortController();
-  const timer = setTimeout(() => abort.abort(), 10_000);
-  try {
-    const res = await fetch(`${API_URL}/api/team`, {
-      method: "POST",
-      headers: {
-        "Content-Type": "application/json",
-        ...(token ? { Authorization: `Bearer ${token}` } : {}),
-      },
-      body: JSON.stringify(payload),
-      signal: abort.signal,
-    });
-    if (!res.ok) throw new Error(`Request failed (${res.status})`);
-    return (await res.json()) as T;
-  } finally {
-    clearTimeout(timer);
-  }
+  // apiFetch enforces a hard timeout and rejects login-page redirects, so a
+  // hung or out-of-date server fails fast instead of freezing screens.
+  const res = await apiFetch("/api/team", {
+    method: "POST",
+    headers: {
+      "Content-Type": "application/json",
+      ...(token ? { Authorization: `Bearer ${token}` } : {}),
+    },
+    body: JSON.stringify(payload),
+  });
+  if (!res.ok) throw new Error(`Request failed (${res.status})`);
+  return (await res.json()) as T;
 }
 
 type Result<T = undefined> = { data: T | null; error: string | null };

@@ -1,9 +1,6 @@
 import * as ImagePicker from "expo-image-picker";
 import { supabase } from "./supabase";
-
-// The web app hosts the R2 upload endpoint; mobile posts to it with a Bearer
-// token so receipts land in the same store the web reads from.
-const API_URL = process.env.EXPO_PUBLIC_API_URL ?? "https://host-hours.vercel.app";
+import { apiFetch } from "./web-api";
 
 export type PickedPhoto = { uri: string; name: string; type: string };
 
@@ -34,7 +31,7 @@ export async function deleteReceipt(photoId: string): Promise<{ error: string | 
   const token = data.session?.access_token;
   if (!token) return { error: "Not authenticated" };
   try {
-    const res = await fetch(`${API_URL}/api/receipt/${photoId}`, {
+    const res = await apiFetch(`/api/receipt/${photoId}`, {
       method: "DELETE",
       headers: { Authorization: `Bearer ${token}` },
     });
@@ -60,11 +57,12 @@ export async function uploadReceipt(
   form.append("full_0", { uri: photo.uri, name: photo.name, type: photo.type } as any);
 
   try {
-    const res = await fetch(`${API_URL}/api/receipt/upload`, {
+    // Longer timeout: photo uploads are slower than JSON calls.
+    const res = await apiFetch("/api/receipt/upload", {
       method: "POST",
       headers: { Authorization: `Bearer ${token}` },
       body: form,
-    });
+    }, 60_000);
     if (!res.ok) return { error: `Upload failed (${res.status})` };
     return { error: null };
   } catch (e: any) {
