@@ -344,6 +344,16 @@ export async function getMyTeamOwner(
   return { ownerId: userId, role: "owner" };
 }
 
+/** Soft-delete time logs (sets deleted_at, like the web editor). */
+export async function deleteTimeLogs(ids: string[]): Promise<{ error: string | null }> {
+  if (ids.length === 0) return { error: null };
+  const { error } = await supabase
+    .from("time_logs")
+    .update({ deleted_at: new Date().toISOString() })
+    .in("id", ids);
+  return { error: error?.message ?? null };
+}
+
 /** The caller's role on a team they belong to; "owner" if they're not a member. */
 export async function getMyRole(userId: string): Promise<TeamRole> {
   const { data } = await supabase

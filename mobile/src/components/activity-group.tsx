@@ -1,7 +1,7 @@
 import { useEffect, useRef, useState } from "react";
 import { ActivityIndicator, Pressable, Text, TextInput, View } from "react-native";
 import { Ionicons } from "@expo/vector-icons";
-import { updateTimeLog } from "@/lib/db";
+import { deleteTimeLogs, updateTimeLog } from "@/lib/db";
 import { formatDayLabel, formatDuration, formatTime, type LogGroup } from "@/lib/format";
 import { ReceiptAttach } from "@/components/receipt-attach";
 import { colors, fonts, radius, space } from "@/theme/tokens";
@@ -146,6 +146,8 @@ export function ActivityRow({
   const [notes, setNotes] = useState(group.description ?? "");
   const [isOnsite, setIsOnsite] = useState(group.isOnsite);
   const [saveStatus, setSaveStatus] = useState<"idle" | "saving" | "saved">("idle");
+  const [confirmDelete, setConfirmDelete] = useState(false);
+  const [deleting, setDeleting] = useState(false);
   const noteTimer = useRef<ReturnType<typeof setTimeout> | undefined>(undefined);
 
   async function runSave(fn: () => Promise<any>) {
@@ -175,6 +177,16 @@ export function ActivityRow({
     runSave(async () => {
       for (const id of ids) await updateTimeLog(id, { is_onsite: onsite });
     });
+  }
+
+  async function handleDelete() {
+    if (!confirmDelete) return setConfirmDelete(true);
+    setDeleting(true);
+    // Soft delete (deleted_at), same as the web editor — recoverable in the DB.
+    await deleteTimeLogs(ids);
+    setDeleting(false);
+    setConfirmDelete(false);
+    onUpdated();
   }
 
   return (
@@ -239,6 +251,34 @@ export function ActivityRow({
 
           <Text style={{ fontFamily: fonts.mono, fontSize: 10, letterSpacing: 1.5, textTransform: "uppercase", color: colors.quill, fontWeight: "500", marginTop: space(4), marginBottom: space(2) }}>Receipts or photos</Text>
           <ReceiptAttach timeLogIds={ids} />
+
+          {/* Delete entry — soft delete, tap-again confirm (web parity) */}
+          <Pressable
+            onPress={handleDelete}
+            disabled={deleting}
+            style={{
+              marginTop: space(4),
+              minHeight: 44,
+              borderRadius: radius.md,
+              borderWidth: 1,
+              borderColor: confirmDelete ? colors.tangerine : colors.chalk,
+              alignItems: "center",
+              justifyContent: "center",
+              opacity: deleting ? 0.6 : 1,
+            }}
+          >
+            {deleting ? (
+              <ActivityIndicator color={colors.tangerine} />
+            ) : (
+              <Text style={{ fontFamily: fonts.mono, fontSize: 11, letterSpacing: 1.5, textTransform: "uppercase", color: colors.tangerine, fontWeight: "500" }}>
+                {confirmDelete
+                  ? "Tap again to confirm delete"
+                  : group.entries.length > 1
+                    ? `Delete entry (${group.entries.length} sessions)`
+                    : "Delete entry"}
+              </Text>
+            )}
+          </Pressable>
         </View>
       )}
     </View>
