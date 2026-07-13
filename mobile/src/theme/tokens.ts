@@ -13,6 +13,7 @@ export const colors = {
 
   cream: "#FBF8F1",
   vellum: "#EDE5D4",
+  bone: "#ECE7DC",
 
   char: "#2C2C2A",
   quill: "#5F5E5A",

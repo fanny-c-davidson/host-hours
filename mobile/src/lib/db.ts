@@ -265,6 +265,66 @@ export async function updateTimeLog(
   return { error: error?.message ?? null };
 }
 
+export type FilterProperty = { id: string; name: string; tags: string[] };
+
+/** Properties with tags, for the reports filter pills. */
+export async function getFilterProperties(): Promise<FilterProperty[]> {
+  const { data } = await supabase
+    .from("properties")
+    .select("id, name, tags")
+    .is("deleted_at", null)
+    .order("created_at", { ascending: false });
+  return (data ?? []).map((p: any) => ({ id: p.id, name: p.name, tags: p.tags ?? [] }));
+}
+
+export type Cohost = { memberId: string; name: string };
+
+/**
+ * The caller's spouse co-owner, in either direction: the spouse on the
+ * caller's team, or — if the caller is a spouse — the team's owner. Their
+ * hours combine for the IRS material participation tests.
+ */
+export async function getCohost(userId: string): Promise<Cohost | null> {
+  const { data: spouse } = await supabase
+    .from("team_members")
+    .select("member_id, email, first_name")
+    .eq("owner_id", userId)
+    .eq("role", "spouse")
+    .eq("status", "active")
+    .limit(1)
+    .maybeSingle();
+
+  if (spouse?.member_id) {
+    const { data: p } = await supabase
+      .from("profiles")
+      .select("full_name")
+      .eq("id", spouse.member_id)
+      .maybeSingle();
+    const profileFirst = p?.full_name?.split(" ")[0];
+    return { memberId: spouse.member_id, name: spouse.first_name || profileFirst || spouse.email };
+  }
+
+  const { data: mine } = await supabase
+    .from("team_members")
+    .select("owner_id")
+    .eq("member_id", userId)
+    .eq("role", "spouse")
+    .eq("status", "active")
+    .limit(1)
+    .maybeSingle();
+
+  if (mine?.owner_id) {
+    const { data: p } = await supabase
+      .from("profiles")
+      .select("full_name")
+      .eq("id", mine.owner_id)
+      .maybeSingle();
+    return { memberId: mine.owner_id, name: p?.full_name?.split(" ")[0] || "Owner" };
+  }
+
+  return null;
+}
+
 /**
  * The team the caller manages: their own (as owner) or the one they belong to
  * (as spouse/manager/employee).
@@ -358,18 +418,20 @@ export type TeamMember = {
   name: string;
   role: TeamRole;
   email: string;
+  display_role: string | null;
 };
 
 export async function getTeamMembers(ownerId: string): Promise<TeamMember[]> {
   const { data } = await supabase
     .from("team_members")
-    .select("member_id, role, email, first_name, last_name")
+    .select("member_id, role, email, first_name, last_name, display_role")
     .eq("owner_id", ownerId)
     .eq("status", "active");
   return (data ?? []).map((r: any) => ({
     member_id: r.member_id,
     role: r.role,
     email: r.email,
+    display_role: r.display_role ?? null,
     name: [r.first_name, r.last_name].filter(Boolean).join(" ") || r.email,
   }));
 }
