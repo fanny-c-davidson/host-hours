@@ -6,11 +6,14 @@ import { useFocusEffect, useRouter } from "expo-router";
 import { useAuth } from "@/lib/auth";
 import {
   canWriteProperties,
+  createTaskType,
   getMyAutoTimer,
   getMyRole,
   getProfile,
+  getTaskTypes,
   isStaff as isStaffRole,
   setMyAutoTimer,
+  type TaskType,
   type TeamRole,
 } from "@/lib/db";
 import { Card, MetricLabel, SectionLabel } from "@/components/app-ui";
@@ -37,6 +40,10 @@ export default function SettingsScreen() {
   const [target, setTarget] = useState<string | null>("500");
   const [autoTimer, setAutoTimer] = useState(false);
   const [defaultTask, setDefaultTask] = useState("");
+  const [taskTypes, setTaskTypes] = useState<TaskType[]>([]);
+  const [taskPickerOpen, setTaskPickerOpen] = useState(false);
+  const [addingTask, setAddingTask] = useState(false);
+  const [newTaskName, setNewTaskName] = useState("");
   const [savingAuto, setSavingAuto] = useState(false);
   const [bioAvailable, setBioAvailable] = useState(false);
   const [bioOn, setBioOn] = useState(false);
@@ -47,11 +54,12 @@ export default function SettingsScreen() {
       async function load() {
         if (!uid) return;
         const r = await getMyRole(uid);
-        const [profile, at, bioAvail, bioEnabled] = await Promise.all([
+        const [profile, at, bioAvail, bioEnabled, types] = await Promise.all([
           getProfile(uid),
           getMyAutoTimer(uid, r),
           isBiometricAvailable(),
           isBiometricEnabled(),
+          getTaskTypes(),
         ]);
         if (!active) return;
         setRole(r);
@@ -63,6 +71,7 @@ export default function SettingsScreen() {
         setTarget(profile?.target_test ?? "500");
         setAutoTimer(at.enabled);
         setDefaultTask(at.defaultTask);
+        setTaskTypes(types);
         setLoading(false);
       }
       load();
@@ -80,6 +89,22 @@ export default function SettingsScreen() {
     // Reconcile geofences (requests background-location permission when enabling).
     if (uid) await syncGeofences(uid).catch(() => {});
     setSavingAuto(false);
+  }
+
+  // Create a task type and make it the auto-timer default in one step.
+  async function addAndSelectTask() {
+    const name = newTaskName.trim();
+    if (!name || !uid) return;
+    const existing = taskTypes.find((t) => t.name.toLowerCase() === name.toLowerCase());
+    if (!existing) {
+      const maxOrder = taskTypes.length > 0 ? Math.max(...taskTypes.map((t) => t.sort_order)) + 1 : 0;
+      const created = await createTaskType(uid, name, maxOrder);
+      if (created) setTaskTypes((prev) => [...prev, created]);
+    }
+    setNewTaskName("");
+    setAddingTask(false);
+    setTaskPickerOpen(false);
+    await saveAuto(autoTimer, existing?.name ?? name);
   }
 
   async function toggleBiometric(next: boolean) {
@@ -165,14 +190,90 @@ export default function SettingsScreen() {
           {autoTimer && (
             <View style={{ marginTop: space(4) }}>
               <MetricLabel>Default task</MetricLabel>
-              <TextInput
-                value={defaultTask}
-                onChangeText={setDefaultTask}
-                onBlur={() => saveAuto(autoTimer, defaultTask)}
-                placeholder="e.g. Cleaning"
-                placeholderTextColor={colors.stone}
-                style={{ minHeight: 44, paddingHorizontal: space(4), borderWidth: 1, borderColor: colors.chalk, borderRadius: radius.md, fontSize: 15, color: colors.char }}
-              />
+
+              {/* Dropdown field */}
+              <Pressable
+                onPress={() => setTaskPickerOpen((v) => !v)}
+                style={{
+                  minHeight: 44,
+                  paddingHorizontal: space(4),
+                  borderWidth: 1,
+                  borderColor: taskPickerOpen ? colors.plum : colors.chalk,
+                  borderRadius: radius.md,
+                  flexDirection: "row",
+                  alignItems: "center",
+                  justifyContent: "space-between",
+                }}
+              >
+                <Text style={{ fontSize: 15, color: defaultTask ? colors.char : colors.stone }}>
+                  {defaultTask || "Choose a task type…"}
+                </Text>
+                <Ionicons name={taskPickerOpen ? "chevron-up" : "chevron-down"} size={16} color={colors.quill} />
+              </Pressable>
+
+              {/* Options */}
+              {taskPickerOpen && (
+                <View style={{ marginTop: space(2), borderWidth: 1, borderColor: colors.chalk, borderRadius: radius.md, overflow: "hidden" }}>
+                  {taskTypes.map((t, i) => {
+                    const selected = t.name === defaultTask;
+                    return (
+                      <Pressable
+                        key={t.id}
+                        onPress={() => {
+                          setTaskPickerOpen(false);
+                          setAddingTask(false);
+                          saveAuto(autoTimer, t.name);
+                        }}
+                        style={{
+                          flexDirection: "row",
+                          alignItems: "center",
+                          justifyContent: "space-between",
+                          paddingHorizontal: space(4),
+                          paddingVertical: space(3),
+                          borderBottomWidth: 1,
+                          borderBottomColor: colors.chalk,
+                          backgroundColor: selected ? colors.plumMist : colors.cream,
+                        }}
+                      >
+                        <Text style={{ fontSize: 14, color: colors.char }}>{t.name}</Text>
+                        {selected && <Ionicons name="checkmark" size={16} color={colors.plum} />}
+                      </Pressable>
+                    );
+                  })}
+
+                  {/* Add a new task type inline */}
+                  {!addingTask ? (
+                    <Pressable
+                      onPress={() => setAddingTask(true)}
+                      style={{ flexDirection: "row", alignItems: "center", gap: space(2), paddingHorizontal: space(4), paddingVertical: space(3) }}
+                    >
+                      <Ionicons name="add" size={16} color={colors.plum} />
+                      <Text style={{ fontSize: 14, fontWeight: "500", color: colors.plum }}>Add new task type</Text>
+                    </Pressable>
+                  ) : (
+                    <View style={{ flexDirection: "row", alignItems: "center", gap: space(2), paddingHorizontal: space(3), paddingVertical: space(2.5) }}>
+                      <TextInput
+                        value={newTaskName}
+                        onChangeText={setNewTaskName}
+                        onSubmitEditing={() => addAndSelectTask()}
+                        autoFocus
+                        placeholder="New task type"
+                        placeholderTextColor={colors.stone}
+                        style={{ flex: 1, minHeight: 38, paddingHorizontal: space(3), borderWidth: 1, borderColor: colors.chalk, borderRadius: radius.sm, fontSize: 14, color: colors.char }}
+                      />
+                      <Pressable
+                        onPress={() => addAndSelectTask()}
+                        style={{ minHeight: 38, paddingHorizontal: space(3.5), borderRadius: radius.sm, backgroundColor: colors.plum, justifyContent: "center" }}
+                      >
+                        <Text style={{ fontSize: 13, fontWeight: "500", color: colors.cream }}>Add</Text>
+                      </Pressable>
+                      <Pressable onPress={() => { setAddingTask(false); setNewTaskName(""); }} hitSlop={6}>
+                        <Text style={{ fontSize: 13, color: colors.quill }}>Cancel</Text>
+                      </Pressable>
+                    </View>
+                  )}
+                </View>
+              )}
             </View>
           )}
           {savingAuto && <Text style={{ fontSize: 11, color: colors.slate, marginTop: space(2) }}>Saving…</Text>}
