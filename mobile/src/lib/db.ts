@@ -265,6 +265,44 @@ export async function updateTimeLog(
   return { error: error?.message ?? null };
 }
 
+export type PropertyListItem = {
+  id: string;
+  name: string;
+  address: string | null;
+  color: string;
+  tags: string[];
+  isDeleted: boolean;
+};
+
+/**
+ * Properties for the list screen (mirrors web /properties): includes address,
+ * tags, and soft-deleted properties that still have the caller's entries.
+ */
+export async function getPropertyList(userId: string): Promise<PropertyListItem[]> {
+  const [{ data: allProps }, { data: logs }] = await Promise.all([
+    supabase
+      .from("properties")
+      .select("id, name, address, color, tags, deleted_at")
+      .order("created_at", { ascending: false }),
+    supabase
+      .from("time_logs")
+      .select("property_id")
+      .eq("user_id", userId)
+      .is("deleted_at", null),
+  ]);
+  const withEntries = new Set((logs ?? []).map((l: any) => l.property_id));
+  return (allProps ?? [])
+    .filter((p: any) => !p.deleted_at || withEntries.has(p.id))
+    .map((p: any) => ({
+      id: p.id,
+      name: p.name,
+      address: p.address ?? null,
+      color: p.color,
+      tags: p.tags ?? [],
+      isDeleted: !!p.deleted_at,
+    }));
+}
+
 export type FilterProperty = { id: string; name: string; tags: string[] };
 
 /** Properties with tags, for the reports filter pills. */
