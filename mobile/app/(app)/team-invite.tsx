@@ -4,9 +4,9 @@ import { SafeAreaView } from "react-native-safe-area-context";
 import { Ionicons } from "@expo/vector-icons";
 import { useFocusEffect, useLocalSearchParams, useRouter } from "expo-router";
 import { useAuth } from "@/lib/auth";
-import { getMyTeamOwner, type TeamRole } from "@/lib/db";
+import { getMyTeamOwner, getProperties, type TeamRole } from "@/lib/db";
 import { manageableRoles, ROLE_DESCRIPTIONS, ROLE_LABELS } from "@/lib/permissions";
-import { getManagedTeamData, inviteTeamMember } from "@/lib/team-api";
+import { inviteTeamMember } from "@/lib/team-api";
 import { MetricLabel, SectionLabel } from "@/components/app-ui";
 import { colors, fonts, radius, space } from "@/theme/tokens";
 
@@ -31,14 +31,9 @@ export default function TeamInviteScreen() {
     useCallback(() => {
       if (!uid) return;
       getMyTeamOwner(uid).then(({ role: r }) => setCallerRole(r));
-      if (owner) {
-        getManagedTeamData(owner)
-          .then((res) => {
-            if (res.data) setProperties(res.data.properties);
-          })
-          .catch(() => {});
-      }
-    }, [uid, owner]),
+      // Direct RLS read — the visible property set is the team's set.
+      getProperties().then(setProperties).catch(() => {});
+    }, [uid]),
   );
 
   const roles = manageableRoles(callerRole);

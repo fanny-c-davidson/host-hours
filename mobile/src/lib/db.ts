@@ -484,6 +484,65 @@ export async function getTeamMembers(ownerId: string): Promise<TeamMember[]> {
   }));
 }
 
+export type TeamRosterMember = {
+  id: string;
+  member_id: string | null;
+  email: string;
+  role: TeamRole;
+  status: string;
+  first_name: string | null;
+  last_name: string | null;
+  display_role: string | null;
+  memberName: string | null;
+  propertyIds: string[];
+};
+
+/**
+ * Full team roster read directly under RLS (no web bridge), so the team
+ * screen renders even when the web app is unreachable. Mutations still go
+ * through the /api/team bridge.
+ */
+export async function getTeamRoster(ownerId: string): Promise<TeamRosterMember[]> {
+  const { data: rows } = await supabase
+    .from("team_members")
+    .select("id, member_id, email, role, status, first_name, last_name, display_role")
+    .eq("owner_id", ownerId)
+    .order("created_at", { ascending: true });
+  const roster = rows ?? [];
+  const memberIds = roster.map((r: any) => r.member_id).filter(Boolean) as string[];
+  const tmIds = roster.map((r: any) => r.id);
+
+  const [profilesRes, assignsRes] = await Promise.all([
+    memberIds.length
+      ? supabase.from("profiles").select("id, full_name").in("id", memberIds)
+      : Promise.resolve({ data: [] as any[] }),
+    tmIds.length
+      ? supabase.from("property_assignments").select("team_member_id, property_id").in("team_member_id", tmIds)
+      : Promise.resolve({ data: [] as any[] }),
+  ]);
+
+  const nameById = new Map((profilesRes.data ?? []).map((p: any) => [p.id, p.full_name]));
+  const propsByTm = new Map<string, string[]>();
+  for (const a of assignsRes.data ?? []) {
+    const list = propsByTm.get(a.team_member_id) ?? [];
+    list.push(a.property_id);
+    propsByTm.set(a.team_member_id, list);
+  }
+
+  return roster.map((r: any) => ({
+    id: r.id,
+    member_id: r.member_id,
+    email: r.email,
+    role: r.role as TeamRole,
+    status: r.status,
+    first_name: r.first_name ?? null,
+    last_name: r.last_name ?? null,
+    display_role: r.display_role ?? null,
+    memberName: r.member_id ? nameById.get(r.member_id) ?? null : null,
+    propertyIds: propsByTm.get(r.id) ?? [],
+  }));
+}
+
 export type AutoTimer = { enabled: boolean; defaultTask: string };
 
 export async function getMyAutoTimer(userId: string, role: TeamRole): Promise<AutoTimer> {

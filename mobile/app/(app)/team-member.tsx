@@ -4,17 +4,21 @@ import { SafeAreaView } from "react-native-safe-area-context";
 import { Ionicons } from "@expo/vector-icons";
 import { useFocusEffect, useLocalSearchParams, useRouter } from "expo-router";
 import { useAuth } from "@/lib/auth";
-import { getMyTeamOwner, type TeamRole } from "@/lib/db";
+import {
+  getMyTeamOwner,
+  getProperties,
+  getTeamRoster,
+  type TeamRosterMember,
+  type TeamRole,
+} from "@/lib/db";
 import { canManageMember, manageableRoles, ROLE_LABELS } from "@/lib/permissions";
 import {
-  getManagedTeamData,
   removeTeamMember,
   resendInvitation,
   updatePropertyAssignments,
   updateTeamMemberEmail,
   updateTeamMemberName,
   updateTeamMemberRole,
-  type ManagedTeamMember,
 } from "@/lib/team-api";
 import { MetricLabel, SectionLabel } from "@/components/app-ui";
 import { colors, fonts, radius, space } from "@/theme/tokens";
@@ -26,7 +30,7 @@ export default function TeamMemberScreen() {
   const { id, owner } = useLocalSearchParams<{ id: string; owner: string }>();
 
   const [loading, setLoading] = useState(true);
-  const [member, setMember] = useState<ManagedTeamMember | null>(null);
+  const [member, setMember] = useState<TeamRosterMember | null>(null);
   const [properties, setProperties] = useState<{ id: string; name: string }[]>([]);
   const [callerRole, setCallerRole] = useState<TeamRole>("owner");
 
@@ -49,18 +53,21 @@ export default function TeamMemberScreen() {
       let active = true;
       async function load() {
         if (!uid || !id || !owner) return;
-        const [{ role: myRole }, res] = await Promise.all([
+        // Member + property list read directly under RLS — no bridge needed
+        // to view; only the save/remove/resend mutations use it.
+        const [{ role: myRole }, roster, props] = await Promise.all([
           getMyTeamOwner(uid),
-          getManagedTeamData(owner).catch(() => null),
+          getTeamRoster(owner).catch(() => [] as TeamRosterMember[]),
+          getProperties().catch(() => []),
         ]);
         if (!active) return;
         setCallerRole(myRole);
-        const m = res?.data?.members.find((x) => x.id === id) ?? null;
+        const m = roster.find((x) => x.id === id) ?? null;
         if (!m) {
-          setError(res?.error ?? "Team member not found.");
+          setError("Team member not found.");
         } else {
           setMember(m);
-          setProperties(res!.data!.properties);
+          setProperties(props);
           setFirstName(m.first_name ?? "");
           setLastName(m.last_name ?? "");
           setEmail(m.email);
