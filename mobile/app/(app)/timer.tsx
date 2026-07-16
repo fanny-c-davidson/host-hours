@@ -14,7 +14,6 @@ import { useFocusEffect, useLocalSearchParams, useRouter } from "expo-router";
 import { Ionicons } from "@expo/vector-icons";
 import { useAuth } from "@/lib/auth";
 import {
-  createTaskType,
   getActiveTimer,
   getProperties,
   getTaskTypes,
@@ -30,6 +29,7 @@ import {
 } from "@/lib/db";
 import { formatDuration, formatDurationLong, formatElapsed } from "@/lib/format";
 import { ReceiptAttach } from "@/components/receipt-attach";
+import { StartTaskList } from "@/components/start-task-list";
 import { colors, fonts, radius, space } from "@/theme/tokens";
 
 // ---------------------------------------------------------------------------
@@ -105,10 +105,6 @@ export default function TimerScreen() {
   // Notes for active timer
   const [notes, setNotes] = useState("");
   const noteTimer = useRef<ReturnType<typeof setTimeout> | undefined>(undefined);
-
-  // Inline add task type
-  const [addingTask, setAddingTask] = useState(false);
-  const [newTaskName, setNewTaskName] = useState("");
 
   // Selected property (for idle mode)
   const [propertyId, setPropertyId] = useState<string | null>(null);
@@ -313,22 +309,6 @@ export default function TimerScreen() {
     await updateActiveTimerDescription(active.id, notes.trim() || null);
     setSavingDetails(false);
     router.push("/dashboard");
-  }
-
-  // ── Add a new task type inline ──────────────────────────────────────
-  async function handleAddTaskType() {
-    const name = newTaskName.trim();
-    if (!name || !uid) return;
-    const maxOrder =
-      taskTypes.length > 0
-        ? Math.max(...taskTypes.map((t) => t.sort_order)) + 1
-        : 0;
-    const created = await createTaskType(uid, name, maxOrder);
-    if (created) {
-      setTaskTypes((prev) => [...prev, created]);
-    }
-    setNewTaskName("");
-    setAddingTask(false);
   }
 
   // ── Stopped entry: auto-save helpers ─────────────────────────────────
@@ -1250,233 +1230,34 @@ export default function TimerScreen() {
 
             {!stoppedEntry && (
             <>
-            {/* Header: DATE / PROPERTY */}
-            <View
-              style={{
-                paddingHorizontal: space(7),
-                paddingTop: space(5),
-                paddingBottom: space(4),
-                flexDirection: "row",
-                justifyContent: "space-between",
-              }}
-            >
-              <View>
-                <Text
-                  style={{
-                    fontFamily: fonts.mono,
-                    fontSize: 10,
-                    letterSpacing: 1.5,
-                    textTransform: "uppercase",
-                    color: colors.slate,
-                    fontWeight: "500",
-                  }}
-                >
-                  Date
-                </Text>
+            {/* Start-a-task plum card (matches web timer idle + dashboard) */}
+            <View style={{ paddingHorizontal: space(7), paddingTop: space(5), marginBottom: space(5) }}>
+              <View
+                style={{
+                  backgroundColor: colors.plum,
+                  borderRadius: radius.xl,
+                  padding: space(5),
+                }}
+              >
                 <Text
                   style={{
                     fontFamily: fonts.serif,
-                    fontSize: 18,
-                    color: colors.char,
+                    fontSize: 22,
+                    color: colors.cream,
                     fontWeight: "500",
-                    marginTop: space(1),
-                  }}
-                >
-                  Today
-                </Text>
-              </View>
-              <View style={{ alignItems: "flex-end" }}>
-                <Text
-                  style={{
-                    fontFamily: fonts.mono,
-                    fontSize: 10,
-                    letterSpacing: 1.5,
-                    textTransform: "uppercase",
-                    color: colors.slate,
-                    fontWeight: "500",
-                  }}
-                >
-                  Property
-                </Text>
-                <Text
-                  style={{
-                    fontFamily: fonts.serif,
-                    fontSize: 18,
-                    color: colors.char,
-                    fontWeight: "500",
-                    marginTop: space(1),
+                    marginBottom: space(4),
                   }}
                   numberOfLines={1}
                 >
-                  {activeProperty?.name ?? "—"}
+                  {activeProperty?.name ?? "Pick a property"}
                 </Text>
-              </View>
-            </View>
-
-            {/* "Start A Task" pills in bone container */}
-            <View
-              style={{
-                paddingHorizontal: space(7),
-                paddingVertical: space(5),
-              }}
-            >
-              <Text
-                style={{
-                  fontFamily: fonts.mono,
-                  fontSize: 10,
-                  letterSpacing: 1.5,
-                  textTransform: "uppercase",
-                  color: colors.quill,
-                  fontWeight: "500",
-                  marginBottom: space(3),
-                }}
-              >
-                Start A Task
-              </Text>
-              <View
-                style={{
-                  backgroundColor: "rgba(237,229,212,0.3)",
-                  borderRadius: 16,
-                  padding: space(4),
-                }}
-              >
-                <View
-                  style={{
-                    flexDirection: "row",
-                    flexWrap: "wrap",
-                    gap: space(2),
-                    alignItems: "center",
-                  }}
-                >
-                  {taskTypes.map((t) => (
-                    <Pressable
-                      key={t.id}
-                      onPress={() => handleStartTask(t.name)}
-                      disabled={busy || !propertyId}
-                      style={{
-                        minHeight: 40,
-                        paddingHorizontal: space(4),
-                        paddingVertical: space(2),
-                        borderRadius: radius.pill,
-                        backgroundColor: colors.cream,
-                        borderWidth: 1,
-                        borderColor: colors.chalk,
-                        opacity: busy || !propertyId ? 0.5 : 1,
-                        justifyContent: "center",
-                      }}
-                    >
-                      <Text
-                        style={{
-                          fontSize: 13,
-                          fontWeight: "500",
-                          color: colors.quill,
-                          lineHeight: 18,
-                        }}
-                      >
-                        {t.name}
-                      </Text>
-                    </Pressable>
-                  ))}
-
-                  {!addingTask ? (
-                    <Pressable
-                      onPress={() => setAddingTask(true)}
-                      style={{
-                        minHeight: 40,
-                        paddingHorizontal: space(4),
-                        paddingVertical: space(2),
-                        borderRadius: radius.pill,
-                        borderWidth: 1,
-                        borderStyle: "dashed",
-                        borderColor: colors.stone,
-                        justifyContent: "center",
-                      }}
-                    >
-                      <Text
-                        style={{
-                          fontSize: 13,
-                          fontWeight: "500",
-                          color: colors.stone,
-                          lineHeight: 18,
-                        }}
-                      >
-                        + Add
-                      </Text>
-                    </Pressable>
-                  ) : null}
-                </View>
-
-                {addingTask && (
-                  <View
-                    style={{
-                      flexDirection: "row",
-                      alignItems: "center",
-                      gap: space(2),
-                      marginTop: space(3),
-                    }}
-                  >
-                    <TextInput
-                      value={newTaskName}
-                      onChangeText={setNewTaskName}
-                      placeholder="New task type"
-                      placeholderTextColor={colors.stone}
-                      autoFocus
-                      onSubmitEditing={handleAddTaskType}
-                      style={{
-                        flex: 1,
-                        minHeight: 40,
-                        paddingHorizontal: space(3.5),
-                        paddingVertical: space(2),
-                        borderRadius: radius.md,
-                        borderWidth: 1,
-                        borderColor: colors.chalk,
-                        color: colors.char,
-                        fontSize: 14,
-                        backgroundColor: colors.cream,
-                      }}
-                    />
-                    <Pressable
-                      onPress={handleAddTaskType}
-                      style={{
-                        minHeight: 40,
-                        paddingHorizontal: space(4),
-                        paddingVertical: space(2),
-                        borderRadius: radius.md,
-                        backgroundColor: colors.plum,
-                      }}
-                    >
-                      <Text
-                        style={{
-                          fontSize: 13,
-                          fontWeight: "500",
-                          color: colors.cream,
-                        }}
-                      >
-                        Add
-                      </Text>
-                    </Pressable>
-                    <Pressable
-                      onPress={() => {
-                        setAddingTask(false);
-                        setNewTaskName("");
-                      }}
-                      style={{
-                        minHeight: 40,
-                        paddingHorizontal: space(3),
-                        paddingVertical: space(2),
-                      }}
-                    >
-                      <Text
-                        style={{
-                          fontSize: 13,
-                          color: colors.quill,
-                        }}
-                      >
-                        Cancel
-                      </Text>
-                    </Pressable>
-                  </View>
-                )}
+                <StartTaskList
+                  taskTypes={taskTypes}
+                  userId={uid!}
+                  onSelect={handleStartTask}
+                  onChanged={refresh}
+                  disabled={busy || !propertyId}
+                />
               </View>
             </View>
 
